@@ -50,9 +50,12 @@ jobs:
             -e VERSION="$version" \
             -e RELEASE="$rpm_release" \
             -e SKIP_TESTS=1 \
+            -e HOST_UID="$(id -u)" \
+            -e HOST_GID="$(id -g)" \
             rockylinux:9 \
             bash -lc '
               set -euo pipefail
+              trap '\''chown -R "$HOST_UID:$HOST_GID" dist 2>/dev/null || true'\'' EXIT
               dnf install -y dnf-plugins-core
               dnf config-manager --set-enabled crb || dnf config-manager --enable crb
               dnf repolist --enabled
