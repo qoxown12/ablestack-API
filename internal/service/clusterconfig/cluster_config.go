@@ -457,12 +457,7 @@ func NormalizeClusterJSON(root map[string]any) map[string]any {
 		mngtNic["dns"] = val
 	}
 	pcsCluster := ensureMap(cfg, "pcsCluster")
-	for i := 1; i <= 3; i++ {
-		key := fmt.Sprintf("hostname%d", i)
-		if _, ok := pcsCluster[key]; !ok {
-			pcsCluster[key] = ""
-		}
-	}
+	normalizePCSClusterMap(pcsCluster)
 
 	externalTimeserver := getString(cfg["external_timeserver"])
 	if externalTimeserver == "" {
@@ -718,12 +713,108 @@ func updatePCSCluster(cfg map[string]any, pcsList []string) {
 		return
 	}
 	pcsCluster := ensureMap(cfg, "pcsCluster")
-	for i, value := range pcsList {
-		if value == "" {
-			continue
+	writePCSClusterValues(pcsCluster, pcsList)
+}
+
+func normalizePCSClusterMap(pcsCluster map[string]any) {
+	writePCSClusterValues(pcsCluster, collectPCSClusterValues(pcsCluster))
+}
+
+func collectPCSClusterValues(pcsCluster map[string]any) []string {
+	if pcsCluster == nil {
+		return nil
+	}
+	values := make([]string, 0, CubeModel.PCSClusterMaxHosts)
+	if raw, ok := pcsCluster["hostnames"]; ok {
+		values = append(values, pcsStringSliceFromAny(raw)...)
+	}
+	for i := 1; i <= CubeModel.PCSClusterMaxHosts; i++ {
+		if value, ok := pcsCluster[fmt.Sprintf("hostname%d", i)]; ok {
+			values = append(values, getString(value))
 		}
+	}
+	return CubeModel.NormalizePCSClusterList(values)
+}
+
+func writePCSClusterValues(pcsCluster map[string]any, values []string) {
+	if pcsCluster == nil {
+		return
+	}
+	clearPCSClusterValues(pcsCluster)
+	hostnames := CubeModel.NormalizePCSClusterList(values)
+	for i, value := range hostnames {
 		pcsCluster[fmt.Sprintf("hostname%d", i+1)] = value
 	}
+	for i := len(hostnames) + 1; i <= 3; i++ {
+		pcsCluster[fmt.Sprintf("hostname%d", i)] = ""
+	}
+	delete(pcsCluster, "hostnames")
+}
+
+func clearPCSClusterValues(pcsCluster map[string]any) {
+	for key := range pcsCluster {
+		if isPCSClusterHostnameKey(key) {
+			delete(pcsCluster, key)
+		}
+	}
+}
+
+func isPCSClusterHostnameKey(key string) bool {
+	if !strings.HasPrefix(key, "hostname") {
+		return false
+	}
+	index, err := strconv.Atoi(strings.TrimPrefix(key, "hostname"))
+	return err == nil && index > 0
+}
+
+func pcsStringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, getString(item))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func filterRemovedPCSClusterValues(values []string, host map[string]any) []string {
+	if len(values) == 0 || host == nil {
+		return values
+	}
+	removeValues := map[string]struct{}{}
+	for _, key := range []string{"hostname", "ablecube", "ablecubePn", "scvmMngt", "scvm", "scvmCn"} {
+		value := strings.ToLower(strings.TrimSpace(getString(host[key])))
+		if value != "" {
+			removeValues[value] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, remove := removeValues[strings.ToLower(strings.TrimSpace(value))]; remove {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func validatePCSClusterInput(args Args) error {
+	return CubeModel.ValidatePCSClusterList(args.PCSClusterList, minPCSClusterHostsForType(args.Type))
+}
+
+func minPCSClusterHostsForType(clusterType string) int {
+	if strings.EqualFold(strings.TrimSpace(clusterType), "ablestack-standalone") {
+		return 0
+	}
+	if isHCIClusterType(clusterType) {
+		return 3
+	}
+	return 1
 }
 
 func updateMngtNic(cfg map[string]any, args Args) {
@@ -746,6 +837,11 @@ func updateMngtNic(cfg map[string]any, args Args) {
 func insert(clusterPath string, args Args) Result {
 	if err := applyNetworkFilter(); err != nil {
 		return resultError(err.Error())
+	}
+	if len(args.PCSClusterList) > 0 {
+		if err := validatePCSClusterInput(args); err != nil {
+			return resultError(err.Error())
+		}
 	}
 
 	root, cfg, err := loadClusterJSON(clusterPath)
@@ -871,8 +967,8 @@ func insertScvmHost(clusterPath string, args Args) Result {
 	if args.CCVMMngtIP == "" {
 		return resultError("ccvm mngt ip required")
 	}
-	if len(args.PCSClusterList) == 0 {
-		return resultError("pcs cluster list required")
+	if err := validatePCSClusterInput(args); err != nil {
+		return resultError(err.Error())
 	}
 
 	params, err := parseHostParams(args.JSONString)
@@ -906,8 +1002,8 @@ func insertAllHost(clusterPath string, args Args) Result {
 	if args.CCVMMngtIP == "" {
 		return resultError("ccvm mngt ip required")
 	}
-	if len(args.PCSClusterList) == 0 {
-		return resultError("pcs cluster list required")
+	if err := validatePCSClusterInput(args); err != nil {
+		return resultError(err.Error())
 	}
 	if !strings.EqualFold(args.Type, "ablestack-hci") && args.IscsiStorage == "" {
 		return resultError("iscsi storage required")
@@ -968,13 +1064,10 @@ func removeHost(clusterPath string, args Args) Result {
 	}
 
 	if found >= 0 {
-		targetIP := getString(target["ablecube"])
 		pcs := ensureMap(cfg, "pcsCluster")
-		for key, value := range pcs {
-			if getString(value) == targetIP {
-				pcs[key] = ""
-			}
-		}
+		targetIP := getString(target["ablecube"])
+		filteredPCS := filterRemovedPCSClusterValues(collectPCSClusterValues(pcs), target)
+		writePCSClusterValues(pcs, filteredPCS)
 
 		if isHCIClusterType(args.Type) {
 			removeIPs := map[string]bool{
@@ -1091,9 +1184,7 @@ func resetClusterConfig(clusterPath string) Result {
 	delete(cfg, "extenal_timeserver")
 
 	pcs := ensureMap(cfg, "pcsCluster")
-	for i := 1; i <= 3; i++ {
-		pcs[fmt.Sprintf("hostname%d", i)] = ""
-	}
+	writePCSClusterValues(pcs, nil)
 
 	cfg["hosts"] = []any{}
 	cfg["iscsi_storage"] = "false"

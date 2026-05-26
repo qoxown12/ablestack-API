@@ -2018,6 +2018,98 @@ definitions:
         type: string
       val: {}
     type: object
+  ablecloud_io_ablestack-api_internal_model_cube.DeployStatusData:
+    properties:
+      available_actions:
+        example:
+        - deploy_cloud_vm
+        - open_storage_center
+        items:
+          type: string
+        type: array
+      checked_at:
+        type: string
+      message_key:
+        example: cloud_vm_not_deployed
+        type: string
+      os_type:
+        example: ablestack-hci
+        type: string
+      raw:
+        $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusRaw'
+      severity:
+        example: warning
+        type: string
+      stage:
+        example: cloud_vm_deploy
+        type: string
+      stage_order:
+        example: 7
+        type: integer
+      warnings:
+        items:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusWarning'
+        type: array
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.DeployStatusRaw:
+    properties:
+      cc_status:
+        example: HEALTH_OK
+        type: string
+      ccfg_status:
+        example: "true"
+        type: string
+      ccvm_bootstrap_status:
+        example: "true"
+        type: string
+      ccvm_status:
+        example: RUNNING
+        type: string
+      gfs_configure:
+        example: "false"
+        type: string
+      license_status:
+        example: "true"
+        type: string
+      local_configure:
+        example: "false"
+        type: string
+      sc_status:
+        example: HEALTH_OK
+        type: string
+      scvm_bootstrap_status:
+        example: "true"
+        type: string
+      scvm_status:
+        example: RUNNING
+        type: string
+      security_patch:
+        example: "false"
+        type: string
+      wall_monitoring_status:
+        example: "true"
+        type: string
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.DeployStatusResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusData'
+      message:
+        example: ok
+        type: string
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.DeployStatusWarning:
+    properties:
+      key:
+        example: storage_cluster_not_healthy
+        type: string
+      message:
+        example: storage cluster is not HEALTH_OK
+        type: string
+    type: object
   ablecloud_io_ablestack-api_internal_model_cube.DiskDevice:
     properties:
       children:
@@ -3419,7 +3511,6 @@ info:
 paths:
   /auth/login:
     post:
-      security: []
       consumes:
       - application/json
       description: 웹 UI/API용 access token을 발급합니다.
@@ -3443,6 +3534,7 @@ paths:
             additionalProperties: true
             type: object
       summary: Login
+      security: []
       tags:
       - Auth
   /auth/me:
@@ -4055,6 +4147,26 @@ paths:
       summary: CCVM DB Dump
       tags:
       - CUBE - DB
+  /cube/deploy/status:
+    get:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: cluster.json, systemProfile, VM, storage, PCS 상태를 조합해 UI용 배포 단계를
+        반환합니다.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/HTTP500InternalServerError'
+      summary: Deployment Status
+      tags:
+      - CUBE - Deploy
   /cube/disk:
     get:
       consumes:
@@ -4173,7 +4285,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: /etc/ceph 설정을 생성하거나 pcsCluster.hostname1에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt
+      description: /etc/ceph 설정을 생성하거나 pcsCluster.hostnameN에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt
         대상으로 배포합니다.
       parameters:
       - description: glue config update request
@@ -5113,7 +5225,7 @@ security:
 - BearerAuth: []
 securityDefinitions:
   BearerAuth:
-    description: Enter the token with the Bearer prefix, e.g. Bearer eyJ...
+    description: Enter the token with the `Bearer ` prefix, e.g. `Bearer eyJ...`
     in: header
     name: Authorization
     type: apiKey

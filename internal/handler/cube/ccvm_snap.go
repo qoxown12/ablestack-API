@@ -187,7 +187,7 @@ func statusCodeFromCCVMSnapResponse(resp CCVMSnapResponse) int {
 	return http.StatusInternalServerError
 }
 
-// runCCVMSnapViaPCS는 cluster.json의 pcsCluster hostname1~3을 ablecubePn과 매핑해
+// runCCVMSnapViaPCS는 cluster.json의 pcsCluster hostnameN을 ablecubePn과 매핑해
 // health가 성공하는 PCS 구성 노드로 snapshot 요청을 전달한다.
 func runCCVMSnapViaPCS(cfg *CubeModel.ClusterConfigSection, req CCVMSnapRequest) CCVMSnapResponse {
 	targets := buildCCVMSnapPCSTargets(cfg)
@@ -537,11 +537,7 @@ func buildCCVMSnapPCSTargets(cfg *CubeModel.ClusterConfigSection) []ccvmSnapPCST
 		return nil
 	}
 
-	pcsIPs := []string{
-		strings.TrimSpace(cfg.PCSCluster.Hostname1),
-		strings.TrimSpace(cfg.PCSCluster.Hostname2),
-		strings.TrimSpace(cfg.PCSCluster.Hostname3),
-	}
+	pcsIPs := cfg.PCSCluster.HostnameList()
 
 	out := make([]ccvmSnapPCSTarget, 0, len(pcsIPs))
 	seen := map[string]struct{}{}

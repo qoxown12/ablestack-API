@@ -41,6 +41,7 @@ import (
 //	@in							header
 //	@name						Authorization
 //	@description				Enter the token with the `Bearer ` prefix, e.g. `Bearer eyJ...`
+//	@Security					BearerAuth
 
 // @externalDocs.description	ABLECLOUD
 // @externalDocs.url			https://www.ablecloud.io
@@ -117,6 +118,7 @@ func main() {
 		cube := v1.Group("/cube")
 		{
 			cube.GET("/cluster/health", CubeHandler.ClusterHealth)
+			cube.GET("/deploy/status", CubeHandler.GetDeployStatus)
 			cube.GET("/hosts", CubeHandler.GetHosts)
 			cube.GET("/test", CubeHandler.GetHosts)
 			cube.GET("/cluster/config", CubeHandler.GetClusterConfig)

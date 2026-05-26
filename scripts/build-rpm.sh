@@ -3,14 +3,39 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="ablestack-api"
-VERSION="${VERSION:-0.1.0}"
+VERSION_FILE="${VERSION_FILE:-${ROOT_DIR}/VERSION}"
+CHANGELOG_FILE="${CHANGELOG_FILE:-${ROOT_DIR}/CHANGELOG.md}"
+if [[ -z "${VERSION:-}" ]]; then
+  if [[ ! -f "$VERSION_FILE" ]]; then
+    echo "missing VERSION file: ${VERSION_FILE}" >&2
+    exit 2
+  fi
+  IFS= read -r VERSION < "$VERSION_FILE" || true
+  VERSION="${VERSION//$'\r'/}"
+  VERSION="${VERSION//[[:space:]]/}"
+fi
 RELEASE="${RELEASE:-1}"
 DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist/rpm}"
 RPMBUILD_DIR="${RPMBUILD_DIR:-${DIST_DIR}/rpmbuild}"
 SPEC_FILE="${ROOT_DIR}/packaging/rpm/${PACKAGE_NAME}.spec"
 
+if [[ -z "$VERSION" ]]; then
+  echo "VERSION must not be empty" >&2
+  exit 2
+fi
+
 if [[ "$VERSION" == *-* ]]; then
   echo "VERSION must be an RPM-compatible version without '-': ${VERSION}" >&2
+  exit 2
+fi
+
+if [[ ! -f "$CHANGELOG_FILE" ]]; then
+  echo "missing CHANGELOG file: ${CHANGELOG_FILE}" >&2
+  exit 2
+fi
+
+if ! grep -Fq "## [${VERSION}]" "$CHANGELOG_FILE"; then
+  echo "CHANGELOG.md must contain a release section for VERSION ${VERSION}" >&2
   exit 2
 fi
 

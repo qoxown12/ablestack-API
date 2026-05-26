@@ -61,3 +61,50 @@ func TestClusterConfigSectionMarshalOmitsEmptyVMScvmFields(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterPCSClusterConfigDynamicHostnames(t *testing.T) {
+	var cfg ClusterPCSClusterConfig
+	if err := json.Unmarshal([]byte(`{"hostname1":"10.0.0.1","hostname4":"10.0.0.4","hostname2":"10.0.0.2"}`), &cfg); err != nil {
+		t.Fatalf("UnmarshalJSON() error = %v", err)
+	}
+
+	hostnames := cfg.HostnameList()
+	if len(hostnames) != 3 {
+		t.Fatalf("HostnameList() length = %d, want 3", len(hostnames))
+	}
+	if hostnames[0] != "10.0.0.1" || hostnames[1] != "10.0.0.2" || hostnames[2] != "10.0.0.4" {
+		t.Fatalf("HostnameList() = %#v", hostnames)
+	}
+
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("MarshalJSON() error = %v", err)
+	}
+	var raw map[string]string
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatalf("marshal output unmarshal error = %v", err)
+	}
+	if raw["hostname3"] != "10.0.0.4" {
+		t.Fatalf("hostname3 = %q, want 10.0.0.4", raw["hostname3"])
+	}
+}
+
+func TestValidatePCSClusterList(t *testing.T) {
+	if err := ValidatePCSClusterList(nil, 0); err != nil {
+		t.Fatalf("ValidatePCSClusterList() standalone-style optional list error = %v", err)
+	}
+	if err := ValidatePCSClusterList([]string{"10.0.0.1"}, 1); err != nil {
+		t.Fatalf("ValidatePCSClusterList() error = %v", err)
+	}
+	if err := ValidatePCSClusterList([]string{"10.0.0.1"}, 3); err == nil {
+		t.Fatalf("ValidatePCSClusterList() expected min host error")
+	}
+
+	values := make([]string, 0, PCSClusterMaxHosts+1)
+	for i := 0; i <= PCSClusterMaxHosts; i++ {
+		values = append(values, string(rune('a'+i)))
+	}
+	if err := ValidatePCSClusterList(values, 1); err == nil {
+		t.Fatalf("ValidatePCSClusterList() expected max host error")
+	}
+}

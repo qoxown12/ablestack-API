@@ -78,8 +78,10 @@ macOS 개발 환경에서 `go test ./...`를 실행하려면 libvirt CGO 의존�
 ## RPM Build
 
 ```bash
-VERSION=0.1.0 RELEASE=1 ./scripts/build-rpm.sh
+./scripts/build-rpm.sh
 ```
+
+RPM 버전은 루트의 `VERSION` 파일을 기준으로 결정합니다. `scripts/build-rpm.sh`는 `CHANGELOG.md`에 같은 버전의 릴리즈 섹션이 있는지도 확인합니다. 임시로 다른 버전을 빌드해야 하면 `VERSION=0.1.5 RELEASE=1 ./scripts/build-rpm.sh`처럼 환경 변수로 override할 수 있습니다. RPM에는 `README.md`, `CHANGELOG.md`, `VERSION`이 문서 파일로 포함됩니다.
 
 빌드 결과는 `dist/rpm/rpmbuild/RPMS`와 `dist/rpm/rpmbuild/SRPMS` 아래에 생성됩니다. RPM은 `cmd/apiserver/main.go`를 `/usr/bin/ablestack-api`로 빌드하고 `ablestack-api.service`를 설치한 뒤 `systemctl enable --now ablestack-api.service`를 실행합니다. `firewall-cmd`가 있는 환경에서는 `firewalld`를 `enable --now` 처리하고 API 포트 `8090/tcp`를 runtime/permanent 모두 열어줍니다.
 

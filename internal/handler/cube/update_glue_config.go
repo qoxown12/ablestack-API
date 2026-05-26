@@ -40,7 +40,7 @@ type glueConfigTarget struct {
 // UpdateGlueConfig godoc
 //
 //	@Summary		Update Glue Config
-//	@Description	/etc/ceph 설정을 생성하거나 pcsCluster.hostname1에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다.
+//	@Description	/etc/ceph 설정을 생성하거나 pcsCluster.hostnameN에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다.
 //	@Tags			CUBE - Glue Config
 //	@Accept			json
 //	@Produce		json
@@ -170,43 +170,55 @@ func generateGlueCephConfig() error {
 }
 
 func copyGlueConfigFromPCSClusterHost(cfg *CubeModel.ClusterConfigSection) (string, error) {
-	pcsHost := strings.TrimSpace(cfg.PCSCluster.Hostname1)
-	if pcsHost == "" {
-		return "", fmt.Errorf("pcsCluster.hostname1 required")
-	}
-
-	sourceTarget := pcsHost
-	if host, ok := findPCSClusterHost(cfg, pcsHost); ok {
-		sourceTarget = firstNonEmpty(host.Ablecube, host.AblecubePn, host.Hostname, pcsHost)
-	}
-	source := fmt.Sprintf("pcsCluster.hostname1:%s", sourceTarget)
-	if isLocalTarget(sourceTarget) || isGFSManageLocalHostname(sourceTarget) {
-		return source, fmt.Errorf("fallback source points to local host")
+	pcsHosts := cfg.PCSCluster.HostnameList()
+	if len(pcsHosts) == 0 {
+		return "", fmt.Errorf("pcsCluster hostname required")
 	}
 	if err := os.MkdirAll(glueConfigCephDir, 0755); err != nil {
-		return source, err
+		return "", err
 	}
 
-	remotePath := fmt.Sprintf("root@%s:/etc/ceph/*", sourceTarget)
-	out, timedOut, err := runCommandOutputWithEnv(
-		"scp",
-		glueConfigCopyTimeout,
-		glueConfigCommandEnv(),
-		"-q",
-		"-o",
-		"StrictHostKeyChecking=no",
-		"-o",
-		"ConnectTimeout=5",
-		remotePath,
-		glueConfigCephDir+"/",
-	)
-	if timedOut {
-		return source, fmt.Errorf("scp from %s timed out after %s", sourceTarget, glueConfigCopyTimeout)
+	var lastSource string
+	var lastErr error
+	for _, pcsHost := range pcsHosts {
+		sourceTarget := pcsHost
+		if host, ok := findPCSClusterHost(cfg, pcsHost); ok {
+			sourceTarget = firstNonEmpty(host.Ablecube, host.AblecubePn, host.Hostname, pcsHost)
+		}
+		source := fmt.Sprintf("pcsCluster:%s", sourceTarget)
+		lastSource = source
+		if isLocalTarget(sourceTarget) || isGFSManageLocalHostname(sourceTarget) {
+			lastErr = fmt.Errorf("fallback source points to local host")
+			continue
+		}
+
+		remotePath := fmt.Sprintf("root@%s:/etc/ceph/*", sourceTarget)
+		out, timedOut, err := runCommandOutputWithEnv(
+			"scp",
+			glueConfigCopyTimeout,
+			glueConfigCommandEnv(),
+			"-q",
+			"-o",
+			"StrictHostKeyChecking=no",
+			"-o",
+			"ConnectTimeout=5",
+			remotePath,
+			glueConfigCephDir+"/",
+		)
+		if timedOut {
+			lastErr = fmt.Errorf("scp from %s timed out after %s", sourceTarget, glueConfigCopyTimeout)
+			continue
+		}
+		if err != nil {
+			lastErr = fmt.Errorf("scp from %s failed: %s", sourceTarget, firstNonEmpty(strings.TrimSpace(out), err.Error()))
+			continue
+		}
+		return source, nil
 	}
-	if err != nil {
-		return source, fmt.Errorf("scp from %s failed: %s", sourceTarget, firstNonEmpty(strings.TrimSpace(out), err.Error()))
+	if lastErr == nil {
+		lastErr = fmt.Errorf("pcsCluster host not found")
 	}
-	return source, nil
+	return lastSource, lastErr
 }
 
 func listGlueConfigFiles() ([]string, error) {

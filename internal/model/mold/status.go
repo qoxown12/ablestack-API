@@ -7,7 +7,6 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/gofrs/uuid"
 	"github.com/melbahja/goph"
-	"log"
 	"net/http"
 	"os/exec"
 	"reflect"
@@ -156,38 +155,41 @@ func UpdateStatus() *TypeMoldStatus {
 }
 
 func CheckMoldWeb() *TypeMoldWebStatus {
-	resp, err := http.Get("http://ccvm:8080/client")
+	Status()
+	if _moldWebStatus == nil {
+		_moldWebStatus = &TypeMoldWebStatus{}
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://ccvm:8080/client")
 	if err != nil {
-		fmt.Println(err)
-		//controller.AddError(err)
+		utils.FancyHandleError(err)
 		_moldWebStatus.Code = 500
 		return _moldWebStatus
 	}
 	if resp == nil {
-		fmt.Println("response is nil")
-		//controller.AddError(errors.New("response is nil"))
 		_moldWebStatus.Code = 500
 		return _moldWebStatus
 	}
-	status := resp.StatusCode
-	fmt.Println(status)
-	fmt.Print(err)
-	_moldWebStatus.Code = status
+	defer resp.Body.Close()
+	_moldWebStatus.Code = resp.StatusCode
 	//body, _ := io.ReadAll(resp.Body)
 	//_moldWebStatus.Body = string(body)
 	return _moldWebStatus
 }
 
 func CheckMoldService() *TypeMoldServiceStatus {
-	UpdateStatus()
+	Status()
+	setMoldServiceStatusDefaults()
 	if gin.Mode() == gin.ReleaseMode {
 		auth, err := goph.Key("/root/.ssh/id_rsa", "")
 		if err != nil {
-			log.Fatal(err)
+			utils.FancyHandleError(err)
+			return _moldServiceStatus
 		}
 		client, err := goph.New("root", "ccvm", auth)
 		if err != nil {
-			log.Fatal(err)
+			utils.FancyHandleError(err)
+			return _moldServiceStatus
 		}
 		defer client.Close()
 
@@ -195,57 +197,59 @@ func CheckMoldService() *TypeMoldServiceStatus {
 
 		cmd, err := client.Command("systemctl", "is-active", "cloudstack-management")
 		if err != nil {
-			return nil
+			utils.FancyHandleError(err)
+			return _moldServiceStatus
 		}
 		stdout, _ = cmd.CombinedOutput()
 		output := strings.TrimSpace(string(stdout))
-		if output == "active" {
-			_moldServiceStatus.MoldWebService.Active = true
-		} else {
-			_moldServiceStatus.MoldWebService.Active = false
-		}
+		_moldServiceStatus.MoldWebService.Active = output == "active"
 
 		cmd, err = client.Command("systemctl", "is-enabled", "cloudstack-management")
 		if err != nil {
-			return nil
+			utils.FancyHandleError(err)
+			return _moldServiceStatus
 		}
 		stdout, _ = cmd.CombinedOutput()
 		output = strings.TrimSpace(string(stdout))
-		if output == "enabled" {
-			_moldServiceStatus.MoldWebService.Enabled = true
-		} else {
-			_moldServiceStatus.MoldWebService.Enabled = false
-		}
+		_moldServiceStatus.MoldWebService.Enabled = output == "enabled"
 
 		cmd, err = client.Command("systemctl", "is-active", "mysqld")
 		if err != nil {
-			return nil
+			utils.FancyHandleError(err)
+			return _moldServiceStatus
 		}
 		stdout, _ = cmd.CombinedOutput()
 		output = strings.TrimSpace(string(stdout))
-		if output == "active" {
-			_moldServiceStatus.MoldDBService.Active = true
-		} else {
-			_moldServiceStatus.MoldDBService.Active = false
-		}
+		_moldServiceStatus.MoldDBService.Active = output == "active"
 
 		cmd, err = client.Command("systemctl", "is-enabled", "mysqld")
 		if err != nil {
-			return nil
+			utils.FancyHandleError(err)
+			return _moldServiceStatus
 		}
 		stdout, _ = cmd.CombinedOutput()
 		output = strings.TrimSpace(string(stdout))
-		if output == "enabled" {
-			_moldServiceStatus.MoldDBService.Enabled = true
-		} else {
-			_moldServiceStatus.MoldDBService.Enabled = false
-		}
-	} else {
-		_moldServiceStatus.MoldDBService.Enabled = false
-		_moldServiceStatus.MoldDBService.Active = false
-		_moldServiceStatus.MoldWebService.Enabled = false
-		_moldServiceStatus.MoldWebService.Active = false
-
+		_moldServiceStatus.MoldDBService.Enabled = output == "enabled"
 	}
 	return _moldServiceStatus
+}
+
+func setMoldServiceStatusDefaults() {
+	if _moldServiceStatus == nil {
+		_moldServiceStatus = &TypeMoldServiceStatus{
+			MoldWebService: &TypeServerStatus{},
+			MoldDBService:  &TypeServerStatus{},
+		}
+		return
+	}
+	if _moldServiceStatus.MoldWebService == nil {
+		_moldServiceStatus.MoldWebService = &TypeServerStatus{}
+	}
+	if _moldServiceStatus.MoldDBService == nil {
+		_moldServiceStatus.MoldDBService = &TypeServerStatus{}
+	}
+	_moldServiceStatus.MoldDBService.Enabled = false
+	_moldServiceStatus.MoldDBService.Active = false
+	_moldServiceStatus.MoldWebService.Enabled = false
+	_moldServiceStatus.MoldWebService.Active = false
 }

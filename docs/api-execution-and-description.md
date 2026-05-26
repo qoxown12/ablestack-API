@@ -27,8 +27,10 @@ RPM은 `cmd/apiserver/main.go`를 `/usr/bin/ablestack-api`로 빌드하고 syste
 ### 빌드
 
 ```bash
-VERSION=0.1.4 RELEASE=1 ./scripts/build-rpm.sh
+./scripts/build-rpm.sh
 ```
+
+기본 RPM 버전은 루트의 `VERSION` 파일에서 읽는다. `scripts/build-rpm.sh`는 `CHANGELOG.md`에 같은 버전의 릴리즈 섹션이 있는지도 확인한다. 릴리즈 번호는 기본값 `1`을 사용하고, 필요하면 `RELEASE=2 ./scripts/build-rpm.sh`처럼 override한다.
 
 생성 위치:
 
@@ -42,13 +44,13 @@ dist/rpm/rpmbuild/SRPMS/ablestack-api-<version>-<release>.el9.src.rpm
 로컬 RPM은 `rpm -Uvh`보다 `dnf install` 또는 `dnf upgrade`로 설치한다. `dnf`를 사용해야 저장소에 있는 필수 패키지를 함께 해결할 수 있다.
 
 ```bash
-dnf install dist/rpm/rpmbuild/RPMS/x86_64/ablestack-api-0.1.4-1.el9.x86_64.rpm
+dnf install "dist/rpm/rpmbuild/RPMS/x86_64/ablestack-api-$(cat VERSION)-1.el9.x86_64.rpm"
 ```
 
 업데이트:
 
 ```bash
-dnf upgrade dist/rpm/rpmbuild/RPMS/x86_64/ablestack-api-0.1.4-1.el9.x86_64.rpm
+dnf upgrade "dist/rpm/rpmbuild/RPMS/x86_64/ablestack-api-$(cat VERSION)-1.el9.x86_64.rpm"
 ```
 
 ### RPM 설치 시 자동 처리
@@ -103,7 +105,8 @@ dnf upgrade dist/rpm/rpmbuild/RPMS/x86_64/ablestack-api-0.1.4-1.el9.x86_64.rpm
     "pcsCluster": {
       "hostname1": "",
       "hostname2": "",
-      "hostname3": ""
+      "hostname3": "",
+      "hostname4": "..."
     },
     "hosts": [
       {
@@ -218,6 +221,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | 네트워크 | GET | `/cube/nics` | `action=list,detail` | ethernet, bridge, bond, IP, MAC, speed 조회 |
 | 호스트 | GET | `/cube/hosts` | 없음 | `/etc/hosts`를 네트워크/역할별로 조회 |
 | 클러스터 | GET | `/cube/cluster/health` | `option=host,scvm,ccvm` | API 생존 및 대상 노드 상태 점검 |
+| 배포 상태 | GET | `/cube/deploy/status` | 없음 | UI용 배포 단계 enum과 기존 상태 스냅샷 조회 |
 | 클러스터 | GET | `/cube/cluster/config` | 없음 | `cluster.json`의 `clusterConfig` 조회 |
 | 클러스터 | POST | `/cube/cluster/apply` | `insert,remove,reset,check` | 클러스터 구성 오케스트레이션 |
 | 클러스터 | POST | `/cube/cluster/apply-local` | 내부용 | 각 노드에서 실제 cluster config 적용 |
@@ -306,6 +310,94 @@ curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=host&targe
 curl -sS http://<ablecube-ip>:8090/api/v1/cube/cluster/config
 ```
 
+### `GET /cube/deploy/status`
+
+기존 개별 상태 API는 유지하고, UI가 배포 진행 화면을 단순하게 처리할 수 있도록 현재 배포 단계를 의미형 enum으로 반환한다. `ccfg_status`는 `clusterConfig`의 필수 값이 채워졌는지로 계산하고, `wall_monitoring_status`는 `systemProfile.bootstrap.wall` 값을 사용한다. `ablestack-vm`도 CloudCenter PCS/resource 상태를 사용하므로 `pcsCluster.hostnameN`이 구성 준비 완료 조건에 포함된다. `ablestack-vm`은 PCS 대상 1대부터 가능하고, `ablestack-hci`, `ablestack-hci-filesystem`은 기본 3대 이상이 필요하다.
+
+```bash
+curl -sS http://<ablecube-ip>:8090/api/v1/cube/deploy/status
+```
+
+대표 응답:
+
+```json
+{
+  "code": 200,
+  "message": "ok",
+  "data": {
+    "os_type": "ablestack-hci",
+    "stage": "cloud_vm_deploy",
+    "stage_order": 7,
+    "severity": "warning",
+    "message_key": "cloud_vm_not_deployed",
+    "available_actions": [
+      "download_config_file",
+      "open_storage_center",
+      "deploy_cloud_vm"
+    ],
+    "raw": {
+      "license_status": "true",
+      "ccfg_status": "true",
+      "scvm_status": "RUNNING",
+      "scvm_bootstrap_status": "true",
+      "sc_status": "HEALTH_OK",
+      "cc_status": "UNKNOWN",
+      "ccvm_status": "HEALTH_ERR",
+      "ccvm_bootstrap_status": "false",
+      "wall_monitoring_status": "false",
+      "security_patch": "false"
+    }
+  }
+}
+```
+
+`stage` 값:
+
+| Stage | 의미 |
+| --- | --- |
+| `cluster_prepare` | 클러스터 구성 준비 필요 |
+| `storage_vm_deploy` | 스토리지센터 VM 배포 필요 |
+| `storage_vm_configure` | 스토리지센터 VM 구성 필요 |
+| `storage_cluster_configure` | 스토리지 클러스터 구성 필요 |
+| `hci_shared_file_configure` | HCI 공유 파일 구성 필요 |
+| `gfs_storage_configure` | GFS 스토리지 구성 필요 |
+| `local_storage_configure` | 로컬 스토리지 구성 필요 |
+| `cloud_vm_deploy` | 클라우드센터 VM 배포 필요 |
+| `cloud_vm_configure` | 클라우드센터 VM 구성 필요 |
+| `cloud_cluster_configure` | 클라우드센터 클러스터 구성 필요 |
+| `cloud_resource_configure` | 클라우드센터 리소스 구성 필요 |
+| `monitoring_configure` | 모니터링센터 구성 필요 |
+| `ready` | 배포 완료 상태 |
+| `unsupported_cluster_type` | 지원하지 않는 cluster type |
+
+`available_actions` 값:
+
+| Action | UI 의미 |
+| --- | --- |
+| `download_config_file` | 구성 파일 다운로드 버튼 표시 |
+| `prepare_cluster_config` | 클러스터 구성 준비 실행 |
+| `deploy_storage_vm` | 스토리지센터 VM 배포 |
+| `configure_storage_vm` | 스토리지센터 VM 구성 |
+| `open_storage_center` | 스토리지센터 연결 |
+| `configure_storage_cluster` | 스토리지 클러스터 구성 |
+| `configure_hci_shared_file` | HCI 공유 파일 구성 |
+| `configure_gfs_storage` | GFS 스토리지 구성 |
+| `configure_local_storage` | 로컬 스토리지 구성 |
+| `deploy_cloud_vm` | 클라우드센터 VM 배포 |
+| `configure_cloud_vm` | 클라우드센터 VM 구성 |
+| `configure_cloud_cluster` | 클라우드센터 PCS 클러스터 구성 |
+| `configure_cloud_resource` | 클라우드센터 PCS resource 구성 |
+| `configure_monitoring` | 모니터링센터 구성 |
+| `open_cloud_center` | 클라우드센터 연결 |
+| `open_monitoring_center` | 모니터링센터 연결 |
+| `run_security_patch` | 보안 패치 실행 |
+
+`raw`는 기존 화면에서 사용하던 `sessionStorage` 계열 값을 서버에서 계산한 스냅샷이며, `os_type`에 필요한 key만 반환한다. key가 없으면 해당 `os_type`에서 사용하지 않는 값이고, `UNKNOWN`은 해당 `os_type`에서 필요한 값이지만 조회하지 못했거나 아직 판단하지 못한 상태이다. `cc_status`는 `ablestack-hci`, `ablestack-hci-filesystem`, `ablestack-vm`에서 CloudCenter PCS/resource 상태로 사용하고, `ablestack-standalone`에서는 반환하지 않는다. `HEALTH_ERR1`은 CloudCenter PCS 클러스터 미구성, `HEALTH_ERR2`는 CloudCenter resource 미구성 또는 비정상 상태를 의미한다. `cc_status` 조회는 `pcsCluster` 기준으로 실행 가능한 PCS 노드를 선택하고, 필요하면 해당 노드의 `/cube/pcs/control`로 위임한다.
+
+`stage`가 `ready`여도 운영 상태 경고가 있으면 `severity`는 `warning`이고 `warnings`에 상세 key가 들어간다. UI는 `stage=ready`만으로 무조건 성공 ribbon을 표시하지 말고 `severity`와 `warnings`를 함께 확인해야 한다.
+
+UI는 `stage`, `message_key`, `available_actions`를 기준으로 화면 상태를 매핑하고, 상세 카드에는 기존 `/cube/scvm/status`, `/cube/ccvm/status`, `/cube/gluecluster/status` 같은 API를 계속 사용할 수 있다.
+
 ### `cluster.json` 구조
 
 현재 `clusterConfig.ccvm`에는 CCVM IP만 저장한다. 관리망 CIDR, gateway, DNS는 `mngtNic`로 분리한다.
@@ -326,7 +418,8 @@ curl -sS http://<ablecube-ip>:8090/api/v1/cube/cluster/config
     "pcsCluster": {
       "hostname1": "10.10.31.1",
       "hostname2": "10.10.31.2",
-      "hostname3": ""
+      "hostname3": "10.10.31.3",
+      "hostname4": "10.10.31.4"
     },
     "hosts": [
       {
@@ -363,10 +456,12 @@ HCI/HCI-filesystem 계열은 SCVM 관련 IP가 필요하므로 `hosts`에 아래
 
 | Action | 설명 | 주요 필수값 |
 | --- | --- | --- |
-| `insert` | `cluster.json` 반영 및 `/etc/hosts` 재구성 | `type`, `ccvm`, `hosts`, `pcs_cluster_list`, `iscsi_storage` |
+| `insert` | `cluster.json` 반영 및 `/etc/hosts` 재구성 | `type`, `ccvm`, `hosts`, `pcs_cluster_list`(`standalone` 제외), `iscsi_storage` |
 | `remove` | 지정 hostname 제거 | `target_hostname` 또는 `remove_hostname` |
 | `reset` | `cluster.json`을 기본값으로 초기화 | 없음 |
 | `check` | 대상 ablecube API health 확인 | `hosts`, `type`, `ccvm` 또는 기존 `cluster.json` |
+
+`pcs_cluster_list`는 `clusterConfig.pcsCluster.hostname1...hostname16`으로 저장된다. `ablestack-vm`은 1~16개를 허용하고, `ablestack-hci`, `ablestack-hci-filesystem`은 3~16개를 허용한다. `ablestack-standalone`은 PCS 대상이 없으므로 필수가 아니다. HCI 계열에서 3대 초과 설치를 하더라도 전체 호스트를 자동으로 PCS에 넣지 말고, Ceph MON을 담당할 노드만 `pcs_cluster_list`에 넣는 것을 기본값으로 사용한다.
 
 `insert` 예:
 

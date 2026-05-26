@@ -338,7 +338,7 @@ func ApplyClusterConfig(context *gin.Context) {
 		})
 		return
 	}
-	if err := requirePCSClusterList(req.Action, req.PCSClusterList); err != nil {
+	if err := requirePCSClusterList(req); err != nil {
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
 			Message: err.Error(),
@@ -469,7 +469,7 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 		})
 		return
 	}
-	if err := requirePCSClusterList(req.Action, req.PCSClusterList); err != nil {
+	if err := requirePCSClusterList(req); err != nil {
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
 			Message: err.Error(),
@@ -914,12 +914,25 @@ func shouldIncludeCcvm(req ClusterConfigApplyRequest) bool {
 }
 
 // requirePCSClusterList는 insert 계열 요청에 pcs cluster list가 필요한지 검증한다.
-func requirePCSClusterList(action string, list []string) error {
-	action = strings.ToLower(strings.TrimSpace(action))
-	if strings.HasPrefix(action, "insert") && !hasNonEmptyPCSList(list) {
-		return fmt.Errorf("pcs_cluster_list required")
+func requirePCSClusterList(req ClusterConfigApplyRequest) error {
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	if strings.HasPrefix(action, "insert") {
+		minHosts := minPCSClusterHostsForType(req.Type)
+		if err := CubeModel.ValidatePCSClusterList(req.PCSClusterList, minHosts); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func minPCSClusterHostsForType(clusterType string) int {
+	if strings.EqualFold(strings.TrimSpace(clusterType), "ablestack-standalone") {
+		return 0
+	}
+	if isHCITarget(clusterType) {
+		return 3
+	}
+	return 1
 }
 
 // requireInsertFields는 insert 요청에 필요한 필수 필드가 모두 있는지 검증한다.
@@ -937,14 +950,4 @@ func requireInsertFields(req ClusterConfigApplyRequest) error {
 		return fmt.Errorf("iscsi_storage required")
 	}
 	return nil
-}
-
-// hasNonEmptyPCSList는 pcs cluster list에 비어 있지 않은 값이 하나라도 있는지 확인한다.
-func hasNonEmptyPCSList(list []string) bool {
-	for _, value := range list {
-		if strings.TrimSpace(value) != "" {
-			return true
-		}
-	}
-	return false
 }

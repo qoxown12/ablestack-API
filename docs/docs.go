@@ -31,7 +31,6 @@ const docTemplate = `{
     "paths": {
         "/auth/login": {
             "post": {
-                "security": [],
                 "description": "웹 UI/API용 access token을 발급합니다.",
                 "consumes": [
                     "application/json"
@@ -43,6 +42,7 @@ const docTemplate = `{
                     "Auth"
                 ],
                 "summary": "Login",
+                "security": [],
                 "parameters": [
                     {
                         "description": "login request",
@@ -993,6 +993,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/cube/deploy/status": {
+            "get": {
+                "description": "cluster.json, systemProfile, VM, storage, PCS 상태를 조합해 UI용 배포 단계를 반환합니다.",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CUBE - Deploy"
+                ],
+                "summary": "Deployment Status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP500InternalServerError"
+                        }
+                    }
+                }
+            }
+        },
         "/cube/disk": {
             "get": {
                 "description": "Cube의 Disk목록을 보여줍니다. action=detail은 multipath/single 분류 목록을 반환합니다.",
@@ -1165,7 +1194,7 @@ const docTemplate = `{
         },
         "/cube/glue/config/update": {
             "post": {
-                "description": "/etc/ceph 설정을 생성하거나 pcsCluster.hostname1에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다.",
+                "description": "/etc/ceph 설정을 생성하거나 pcsCluster.hostnameN에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5498,6 +5527,135 @@ const docTemplate = `{
                 "val": {}
             }
         },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployStatusData": {
+            "type": "object",
+            "properties": {
+                "available_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "deploy_cloud_vm",
+                        "open_storage_center"
+                    ]
+                },
+                "checked_at": {
+                    "type": "string"
+                },
+                "message_key": {
+                    "type": "string",
+                    "example": "cloud_vm_not_deployed"
+                },
+                "os_type": {
+                    "type": "string",
+                    "example": "ablestack-hci"
+                },
+                "raw": {
+                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusRaw"
+                },
+                "severity": {
+                    "type": "string",
+                    "example": "warning"
+                },
+                "stage": {
+                    "type": "string",
+                    "example": "cloud_vm_deploy"
+                },
+                "stage_order": {
+                    "type": "integer",
+                    "example": 7
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusWarning"
+                    }
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployStatusRaw": {
+            "type": "object",
+            "properties": {
+                "cc_status": {
+                    "type": "string",
+                    "example": "HEALTH_OK"
+                },
+                "ccfg_status": {
+                    "type": "string",
+                    "example": "true"
+                },
+                "ccvm_bootstrap_status": {
+                    "type": "string",
+                    "example": "true"
+                },
+                "ccvm_status": {
+                    "type": "string",
+                    "example": "RUNNING"
+                },
+                "gfs_configure": {
+                    "type": "string",
+                    "example": "false"
+                },
+                "license_status": {
+                    "type": "string",
+                    "example": "true"
+                },
+                "local_configure": {
+                    "type": "string",
+                    "example": "false"
+                },
+                "sc_status": {
+                    "type": "string",
+                    "example": "HEALTH_OK"
+                },
+                "scvm_bootstrap_status": {
+                    "type": "string",
+                    "example": "true"
+                },
+                "scvm_status": {
+                    "type": "string",
+                    "example": "RUNNING"
+                },
+                "security_patch": {
+                    "type": "string",
+                    "example": "false"
+                },
+                "wall_monitoring_status": {
+                    "type": "string",
+                    "example": "true"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployStatusResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployStatusData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployStatusWarning": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "example": "storage_cluster_not_healthy"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "storage cluster is not HEALTH_OK"
+                }
+            }
+        },
         "ablecloud_io_ablestack-api_internal_model_cube.DiskDevice": {
             "type": "object",
             "properties": {
@@ -7456,10 +7614,10 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "BearerAuth": {
+            "description": "Enter the token with the ` + "`" + `Bearer ` + "`" + ` prefix, e.g. ` + "`" + `Bearer eyJ...` + "`" + `",
             "type": "apiKey",
             "name": "Authorization",
-            "in": "header",
-            "description": "Enter the token with the Bearer prefix, e.g. Bearer eyJ..."
+            "in": "header"
         }
     },
     "externalDocs": {

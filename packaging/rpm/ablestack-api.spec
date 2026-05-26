@@ -8,7 +8,7 @@
 %bcond_without tests
 
 Name:           ablestack-api
-Version:        %{?rpm_version}%{!?rpm_version:0.1.0}
+Version:        %{?rpm_version}%{!?rpm_version:0.1.1}
 Release:        %{?rpm_release}%{!?rpm_release:1}%{?dist}
 Summary:        ABLESTACK API server
 License:        Apache-2.0
@@ -116,7 +116,7 @@ fi
 
 %files
 %license LICENSE
-%doc README.md
+%doc README.md CHANGELOG.md VERSION
 %{_bindir}/%{name}
 %{_unitdir}/%{service_name}.service
 %{_libexecdir}/%{name}/merge-json-defaults.py
@@ -135,5 +135,14 @@ fi
 %dir %{state_root}/scvm
 
 %changelog
-* Fri May 22 2026 ABLECLOUD <support@ablecloud.io> - 0.1.0-1
+* Tue May 26 2026 ABLECLOUD <support@ablecloud.io> - 0.1.1-1
+- Add deployment status API for UI stage handling.
+- Add dynamic PCS cluster target handling up to 16 hosts.
+- Separate PCS validation rules by ABLESTACK deployment type.
+- Improve PCS-based CloudCenter status, snapshot, and Glue config flows.
+- Update API documentation and Swagger output for deployment status.
+
+* Tue May 26 2026 ABLECLOUD <support@ablecloud.io> - 0.1.0-1
 - Add RPM packaging for ABLESTACK API.
+- Use VERSION as the RPM build version source.
+- Include CHANGELOG and VERSION in package documentation.

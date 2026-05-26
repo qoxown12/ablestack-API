@@ -446,11 +446,7 @@ func ccvmPCSSetupClusterHosts(cfg *CubeModel.ClusterConfigSection) []string {
 	if cfg == nil {
 		return nil
 	}
-	return normalizeStringSlice([]string{
-		cfg.PCSCluster.Hostname1,
-		cfg.PCSCluster.Hostname2,
-		cfg.PCSCluster.Hostname3,
-	})
+	return cfg.PCSCluster.HostnameList()
 }
 
 // setupCCVMSnapshotCronLocal은 현재 노드의 root crontab에서 기존 CCVM 스냅샷 줄을 제거한 뒤 한 줄만 등록한다.

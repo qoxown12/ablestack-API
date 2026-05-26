@@ -86,11 +86,7 @@ func buildPCSExecutionTargets(cfg *CubeModel.ClusterConfigSection) []pcsExecutio
 	if cfg == nil {
 		return nil
 	}
-	pcsHosts := []string{
-		strings.TrimSpace(cfg.PCSCluster.Hostname1),
-		strings.TrimSpace(cfg.PCSCluster.Hostname2),
-		strings.TrimSpace(cfg.PCSCluster.Hostname3),
-	}
+	pcsHosts := cfg.PCSCluster.HostnameList()
 
 	out := make([]pcsExecutionTarget, 0, len(pcsHosts))
 	seen := map[string]struct{}{}
