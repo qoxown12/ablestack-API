@@ -2,7 +2,6 @@ package controller
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/goccy/go-json"
 )
@@ -11,26 +10,21 @@ type Config struct {
 	Neighbor []TypeNeighbor `json:"neighbor"`
 }
 
-const defaultConfigFile = "configs/config.json"
+const (
+	defaultConfigFile       = "/etc/ablestack/config.json"
+	developmentConfigFile   = "configs/config.json"
+	defaultConfigFileEnvKey = "CUBE_CONFIG_PATH"
+)
 
 func configPath() string {
-	if v := os.Getenv("CUBE_CONFIG_PATH"); v != "" {
+	if v := os.Getenv(defaultConfigFileEnvKey); v != "" {
 		return v
 	}
 	if _, err := os.Stat(defaultConfigFile); err == nil {
 		return defaultConfigFile
 	}
-	exe, err := os.Executable()
-	if err == nil {
-		exeDir := filepath.Dir(exe)
-		candidate := filepath.Join(exeDir, "..", "configs", "config.json")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-		candidate = filepath.Join(exeDir, "configs", "config.json")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
+	if _, err := os.Stat(developmentConfigFile); err == nil {
+		return developmentConfigFile
 	}
 	return defaultConfigFile
 }

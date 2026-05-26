@@ -1,0 +1,51 @@
+{
+    "clusterConfig": {
+        "type": "",
+        "backup_path": "",
+        "ccvm": {
+            "ip": ""
+        },
+        "mngtNic": {
+            "cidr": "",
+            "gw": "",
+            "dns": ""
+        },
+        "pcsCluster": {
+            "hostname1": "",
+            "hostname2": "",
+            "hostname3": ""
+        },
+        "hosts": [
+            {
+                "index": "",
+                "hostname": "",
+                "ablecube": "",
+                "scvmMngt": "",
+                "ablecubePn": "",
+                "scvm": "",
+                "scvmCn": ""
+            }
+        ],
+        "external_timeserver": "",
+        "iscsi_storage": ""
+    },
+    "security": {
+        "internal_token": ""
+    },
+    "systemProfile": {
+        "bootstrap": {
+            "scvm": "",
+            "ccvm": "",
+            "wall": "",
+            "gfs_configure": "",
+            "local_configure": ""
+        },
+        "license": {
+            "status": "",
+            "type": ""
+        },
+        "security_patch": {
+            "status": ""
+        }
+    }
+}

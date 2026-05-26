@@ -1,0 +1,92 @@
+name: Release RPM
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without v prefix, for example 0.1.0"
+        required: true
+        type: string
+      release:
+        description: "RPM release number"
+        required: false
+        default: "1"
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-rpm:
+    name: Build and publish RPM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build RPM
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            rpm_release="${{ inputs.release }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+            rpm_release="1"
+            if [ -z "$version" ] || [ "$version" = "$GITHUB_REF_NAME" ]; then
+              echo "Tag must use v-prefixed semantic version format, for example v0.1.0." >&2
+              exit 2
+            fi
+          fi
+
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            -e VERSION="$version" \
+            -e RELEASE="$rpm_release" \
+            -e SKIP_TESTS=1 \
+            -e HOST_UID="$(id -u)" \
+            -e HOST_GID="$(id -g)" \
+            rockylinux:9 \
+            bash -lc '
+              set -euo pipefail
+              trap '\''chown -R "$HOST_UID:$HOST_GID" dist 2>/dev/null || true'\'' EXIT
+              dnf install -y dnf-plugins-core
+              dnf config-manager --set-enabled crb || dnf config-manager --enable crb
+              dnf repolist --enabled
+              dnf --enablerepo=crb install -y rpm-build golang libvirt-devel pkgconfig systemd-rpm-macros tar gzip gcc make git findutils
+              ./scripts/build-rpm.sh
+            '
+
+      - name: Collect RPM files
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist/release
+          find dist/rpm/rpmbuild/RPMS dist/rpm/rpmbuild/SRPMS -type f \( -name "*.rpm" -o -name "*.src.rpm" \) -print -exec cp {} dist/release/ \;
+          ls -lh dist/release
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            release_tag="v${{ inputs.version }}"
+          else
+            release_tag="$GITHUB_REF_NAME"
+          fi
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" dist/release/* --clobber
+          else
+            gh release create "$release_tag" dist/release/* \
+              --title "ablestack-api ${release_tag}" \
+              --generate-notes
+          fi

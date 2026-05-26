@@ -1,13 +1,13 @@
 package controller
 
 import (
+	"ablecloud.io/ablestack-api/internal/infra/utils"
+	Glue "ablecloud.io/ablestack-api/internal/model/glue"
+	Mold "ablecloud.io/ablestack-api/internal/model/mold"
 	"bufio"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-json"
-	Glue "github.com/ycyun/Cube-API/internal/domain/model/glue"
-	Mold "github.com/ycyun/Cube-API/internal/domain/model/mold"
-	"github.com/ycyun/Cube-API/internal/infra/utils"
 	"io"
 	"net/http"
 	"os"
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	Cube "github.com/ycyun/Cube-API/internal/domain/model/cube"
+	Cube "ablecloud.io/ablestack-api/internal/model/cube"
 )
 
 type TypeNeighbor struct {
@@ -51,6 +51,7 @@ func Init() *TypeController {
 				controller.Cube = Cube.Cube()
 				controller.Mold = Mold.Status()
 				controller.Glue = Glue.Status()
+				controller.errors = &utils.Errors{}
 			})
 	} else {
 		fmt.Println("get old ", reflect.TypeOf(controller), " instance.")
