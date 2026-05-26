@@ -1,6 +1,17 @@
 name: Release RPM
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without v prefix, for example 0.1.0"
+        required: true
+        type: string
+      release:
+        description: "RPM release number"
+        required: false
+        default: "1"
+        type: string
   push:
     tags:
       - "v*"
@@ -21,17 +32,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          version="${GITHUB_REF_NAME#v}"
-          if [ -z "$version" ] || [ "$version" = "$GITHUB_REF_NAME" ]; then
-            echo "Tag must use v-prefixed semantic version format, for example v0.1.0." >&2
-            exit 2
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            rpm_release="${{ inputs.release }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+            rpm_release="1"
+            if [ -z "$version" ] || [ "$version" = "$GITHUB_REF_NAME" ]; then
+              echo "Tag must use v-prefixed semantic version format, for example v0.1.0." >&2
+              exit 2
+            fi
           fi
 
           docker run --rm \
             -v "$PWD:/src" \
             -w /src \
             -e VERSION="$version" \
-            -e RELEASE=1 \
+            -e RELEASE="$rpm_release" \
             -e SKIP_TESTS=1 \
             rockylinux:9 \
             bash -lc '
@@ -54,10 +71,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/release/* --clobber
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            release_tag="v${{ inputs.version }}"
           else
-            gh release create "$GITHUB_REF_NAME" dist/release/* \
-              --title "ablestack-api ${GITHUB_REF_NAME}" \
+            release_tag="$GITHUB_REF_NAME"
+          fi
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" dist/release/* --clobber
+          else
+            gh release create "$release_tag" dist/release/* \
+              --title "ablestack-api ${release_tag}" \
               --generate-notes
           fi
