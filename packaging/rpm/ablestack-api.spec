@@ -37,7 +37,7 @@ export CGO_ENABLED=1
 if [ -d vendor ]; then
     export GOFLAGS="${GOFLAGS:-} -mod=vendor"
 fi
-go build -trimpath -ldflags "-s -w" -o %{name} ./cmd/apiserver
+go build -buildvcs=false -trimpath -ldflags "-s -w" -o %{name} ./cmd/apiserver
 
 %check
 %if %{with tests}

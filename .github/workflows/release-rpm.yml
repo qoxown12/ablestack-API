@@ -54,8 +54,9 @@ jobs:
             bash -lc '
               set -euo pipefail
               dnf install -y dnf-plugins-core
-              dnf config-manager --set-enabled crb
-              dnf install -y rpm-build golang libvirt-devel pkgconfig tar gzip gcc make git findutils
+              dnf config-manager --set-enabled crb || dnf config-manager --enable crb
+              dnf repolist --enabled
+              dnf --enablerepo=crb install -y rpm-build golang libvirt-devel pkgconfig tar gzip gcc make git findutils
               ./scripts/build-rpm.sh
             '
 
