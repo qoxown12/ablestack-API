@@ -1,0 +1,22 @@
+[Unit]
+Description=ABLESTACK API Server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/etc/ablestack
+Environment=GIN_MODE=release
+Environment=CUBE_CONFIG_PATH=/etc/ablestack/config.json
+Environment=ABLESTACK_CONFIG_PATH=/etc/ablestack
+Environment=ABLESTACK_STATE_PATH=/etc/ablestack/vmconfig
+EnvironmentFile=-/etc/ablestack/ablestack-api.env
+ExecStart=/usr/bin/ablestack-api
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

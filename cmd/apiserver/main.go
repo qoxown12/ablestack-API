@@ -3,23 +3,23 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
+	C "ablecloud.io/ablestack-api/internal/service/controller"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	CubeModel "github.com/ycyun/Cube-API/internal/domain/model/cube"
-	C "github.com/ycyun/Cube-API/internal/service/controller"
 
-	//Cube "github.com/ycyun/Cube-API/internal/api/handler/cube"
+	CubeHandler "ablecloud.io/ablestack-api/internal/handler/cube"
 	"log"
 	"time"
 
-	"github.com/ycyun/Cube-API/docs"
-	Dashboard "github.com/ycyun/Cube-API/internal/api/handler/dashboard"
-	Glue "github.com/ycyun/Cube-API/internal/api/handler/glue"
-	Mold "github.com/ycyun/Cube-API/internal/api/handler/mold"
-	PCS "github.com/ycyun/Cube-API/internal/api/handler/pcs"
-	UTILS "github.com/ycyun/Cube-API/internal/infra/utils"
+	"ablecloud.io/ablestack-api/docs"
+	Auth "ablecloud.io/ablestack-api/internal/handler/auth"
+	Dashboard "ablecloud.io/ablestack-api/internal/handler/dashboard"
+	Glue "ablecloud.io/ablestack-api/internal/handler/glue"
+	Mold "ablecloud.io/ablestack-api/internal/handler/mold"
+	PCS "ablecloud.io/ablestack-api/internal/handler/pcs"
 )
 
 //	@title			Cube API
@@ -37,7 +37,10 @@ import (
 //	@ssshost						10.211.55.11:8080
 //	@BasePath					/api/v1
 //	@Schemes					http https
-//	@securityDefinitions.basic	None
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Enter the token with the `Bearer ` prefix, e.g. `Bearer eyJ...`
 
 // @externalDocs.description	ABLECLOUD
 // @externalDocs.url			https://www.ablecloud.io
@@ -52,26 +55,29 @@ func main() {
 
 	c := C.Init()
 	c.LoadConfig()
-	cubeModel := CubeModel.Cube()
-
 	//c.StatusRegister(Mold.MonitorStatus)
 	c.StatusRegister(Glue.Monitor)
 	//c.StatusRegister(Dashboard.Monitor)
 	c.StatusRegister(PCS.Monitor)
-	c.StatusRegister(cubeModel.Hosts.Update)
-	c.StatusRegister(cubeModel.NICs.Update)
-	c.StatusRegister(cubeModel.Disks.Update)
+	c.StatusRegister(CubeHandler.UpdateHosts)
+	c.StatusRegister(CubeHandler.UpdateClusterConfig)
+	// Background daily ssh-keyscan based on cluster.json + systemProfile
+	c.StatusRegister(CubeHandler.AutoSSHKnownHostsScan)
+	c.StatusRegister(CubeHandler.AutoCCVMSnapshotBackup)
+	c.StatusRegister(CubeHandler.AutoCCVMFileBackupSchedule)
+	c.StatusRegister(CubeHandler.UpdateNICs)
+	c.StatusRegister(CubeHandler.UpdateDisk)
 	c.StatusRegister(C.SaveConfig)
 
 	go c.Start()
 	APIPort := "8090"
 	docs.SwaggerInfo.Schemes = []string{"http", "https"}
-	docs.SwaggerInfo.Host = UTILS.GetLocalIP().String() + ":" + APIPort
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	r := gin.Default()
 	//gin.SetMode(gin.DebugMode)
 	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
 	r.ForwardedByClientIP = true
 	err = r.SetTrustedProxies(nil)
 	if err != nil {
@@ -79,12 +85,30 @@ func main() {
 	}
 
 	r.Use(gin.Logger())
-
 	// Recovery 미들웨어는 panic이 발생하면 500 에러를 씁니다.
 	r.Use(gin.Recovery())
+	// CORS (Swagger/웹 클라이언트 대응)
+	r.Use(func(ctx *gin.Context) {
+		ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		ctx.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Cube-Internal-Token")
+		if ctx.Request.Method == http.MethodOptions {
+			ctx.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		ctx.Next()
+	})
+	r.Use(Auth.Middleware())
 
 	v1 := r.Group("/api/v1")
 	{
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/login", Auth.Login)
+			auth.GET("/me", Auth.Me)
+			auth.POST("/internal-token/rotate", Auth.RotateInternalToken)
+			auth.POST("/internal-token/apply", Auth.ApplyInternalToken)
+		}
 		v1.GET("/neighbor", c.GetNeighbor)
 		v1.GET("/neighbor/info", c.GetNeighborInfo)
 		v1.POST("/neighbor", c.PutNeighbor)
@@ -92,10 +116,49 @@ func main() {
 		v1.DELETE("/neighbor", c.DeleteNeighbor)
 		cube := v1.Group("/cube")
 		{
-			cube.GET("/hosts", cubeModel.Hosts.Get)
-			cube.GET("/test", cubeModel.Hosts.Get)
-			cube.GET("/nics", cubeModel.NICs.Get)
-			cube.GET("/disk", cubeModel.Disks.Get)
+			cube.GET("/cluster/health", CubeHandler.ClusterHealth)
+			cube.GET("/hosts", CubeHandler.GetHosts)
+			cube.GET("/test", CubeHandler.GetHosts)
+			cube.GET("/cluster/config", CubeHandler.GetClusterConfig)
+			cube.POST("/cluster/apply", CubeHandler.ApplyClusterConfig)
+			cube.POST("/cluster/apply-local", CubeHandler.ApplyClusterConfigLocal)
+			cube.POST("/cloudinit/status", CubeHandler.CloudInitStatus)
+			cube.POST("/cloudinit/generate", CubeHandler.GenCloudInit)
+			cube.POST("/cloudinit/ccvm/generate", CubeHandler.CreateCCVMCloudInit)
+			cube.POST("/cloudinit/scvm/generate", CubeHandler.CreateSCVMCloudInit)
+			cube.GET("/url", CubeHandler.GetURL)
+			cube.GET("/system/config", CubeHandler.GetSystemConfig)
+			cube.POST("/system/config", CubeHandler.UpdateSystemConfig)
+			cube.GET("/ccvm/status", CubeHandler.GetCCVMStatus)
+			cube.POST("/ccvm/edit", CubeHandler.EditCCVM)
+			cube.POST("/ccvm/xml", CubeHandler.CreateCCVMXML)
+			cube.POST("/ccvm/snap", CubeHandler.CCVMSnap)
+			cube.POST("/ccvm/backup", CubeHandler.CCVMBackup)
+			cube.POST("/ccvm/restore", CubeHandler.CCVMRestore)
+			cube.POST("/ccvm/lifecycle", CubeHandler.CCVMLifecycle)
+			cube.POST("/ccvm/secondary/resize", CubeHandler.CCVMSecondaryResize)
+			cube.POST("/auto-shutdown", CubeHandler.AutoShutdown)
+			cube.POST("/local/manage", CubeHandler.LocalManage)
+			cube.POST("/clvm/manage", CubeHandler.CLVMManage)
+			cube.POST("/hba/manage", CubeHandler.HBAManage)
+			cube.GET("/gfs/disk/status", CubeHandler.GetGFSDiskStatus)
+			cube.GET("/gfs/resource/status", CubeHandler.GetGFSResourceStatus)
+			cube.POST("/gfs/manage", CubeHandler.GFSManage)
+			cube.POST("/rbd/manage", CubeHandler.RBDManage)
+			cube.GET("/gluecluster/status", CubeHandler.GetGlueClusterStatus)
+			cube.POST("/gluecluster/update", CubeHandler.UpdateGlueCluster)
+			cube.POST("/glue/config/update", CubeHandler.UpdateGlueConfig)
+			cube.GET("/scvm/status", CubeHandler.GetSCVMStatus)
+			cube.POST("/scvm/xml", CubeHandler.CreateSCVMXML)
+			cube.POST("/scvm/lifecycle", CubeHandler.SCVMLifecycle)
+			cube.POST("/pcs/control", CubeHandler.CCVMPCSControl)
+			cube.POST("/ccvm/service/control", CubeHandler.CCVMServiceControl)
+			cube.POST("/version/update", CubeHandler.VersionUpdate)
+			cube.POST("/security/patch", CubeHandler.SecurityPatch)
+			cube.POST("/license", CubeHandler.LicenseControl)
+			cube.POST("/db/dump", CubeHandler.DBDump)
+			cube.GET("/nics", CubeHandler.GetNICs)
+			cube.GET("/disk", CubeHandler.GetDisk)
 		}
 		glue := v1.Group("/glue")
 		{
