@@ -1,0 +1,63 @@
+name: Release RPM
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-rpm:
+    name: Build and publish RPM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build RPM
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "$version" ] || [ "$version" = "$GITHUB_REF_NAME" ]; then
+            echo "Tag must use v-prefixed semantic version format, for example v0.1.0." >&2
+            exit 2
+          fi
+
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            -e VERSION="$version" \
+            -e RELEASE=1 \
+            -e SKIP_TESTS=1 \
+            rockylinux:9 \
+            bash -lc '
+              set -euo pipefail
+              dnf install -y rpm-build golang libvirt-devel pkgconfig tar gzip gcc make git findutils
+              ./scripts/build-rpm.sh
+            '
+
+      - name: Collect RPM files
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist/release
+          find dist/rpm/rpmbuild/RPMS dist/rpm/rpmbuild/SRPMS -type f \( -name "*.rpm" -o -name "*.src.rpm" \) -print -exec cp {} dist/release/ \;
+          ls -lh dist/release
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/release/* \
+              --title "ablestack-api ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
