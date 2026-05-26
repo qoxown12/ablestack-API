@@ -3,6 +3,7 @@
 %global state_root %{config_root}/vmconfig
 %global api_port 8090
 %global debug_package %{nil}
+%{!?_unitdir:%global _unitdir %{_prefix}/lib/systemd/system}
 
 %bcond_without tests
 
@@ -17,6 +18,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  golang
 BuildRequires:  libvirt-devel
 BuildRequires:  pkgconfig
+BuildRequires:  systemd-rpm-macros
 Requires:       systemd
 Requires:       python3
 Recommends:     firewalld
