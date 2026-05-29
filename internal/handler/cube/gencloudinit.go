@@ -9,9 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
-	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,48 +24,6 @@ const (
 
 type cloudInitSubnet map[string]any
 type cloudInitNetworkDevice map[string]any
-
-// GenCloudInit godoc
-//
-//	@Summary		Generate Cloud-Init ISO
-//	@Description	CCVM/SCVM cloud-init ISO를 생성합니다.
-//	@Tags			CUBE - CloudInit
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		CubeModel.GenCloudInitRequest	true	"cloud-init generate request"
-//	@Success		200	{object}	CubeModel.GenCloudInitResponse
-//	@Failure		400	{object}	HTTP400BadRequest
-//	@Failure		500	{object}	HTTP500InternalServerError
-//	@Router			/cube/cloudinit/generate [post]
-func GenCloudInit(context *gin.Context) {
-	var req GenCloudInitRequest
-	if err := context.ShouldBindJSON(&req); err != nil {
-		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
-			ErrCode: http.StatusBadRequest,
-			Message: "invalid request",
-		})
-		return
-	}
-	if err := normalizeGenCloudInitRequest(&req); err != nil {
-		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
-			ErrCode: http.StatusBadRequest,
-			Message: err.Error(),
-		})
-		return
-	}
-
-	cfg, err := loadClusterConfigSection()
-	if err != nil {
-		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
-			ErrCode: http.StatusInternalServerError,
-			Message: "failed to read cluster.json",
-		})
-		return
-	}
-
-	resp := runGenCloudInit(req, cfg)
-	context.JSON(statusCodeFromGenCloudInitResponse(resp), resp)
-}
 
 func normalizeGenCloudInitRequest(req *GenCloudInitRequest) error {
 	if req == nil {

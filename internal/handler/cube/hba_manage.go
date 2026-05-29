@@ -28,23 +28,24 @@ const (
 // HBAManage godoc
 //
 //	@Summary		HBA Manage
-//	@Description	cluster.json hosts[].ablecube 대상 API를 호출해 호스트별 HBA WWN을 조회합니다. SSH는 사용하지 않습니다.
+//	@Description	cluster.json hosts[].ablecube 대상 API를 호출해 호스트별 HBA WWN을 조회합니다. SSH는 사용하지 않으며 요청 body 없이 호출합니다.
 //	@Tags			CUBE - HBA
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body		CubeModel.HBAManageRequest	true	"hba manage request"
 //	@Success		200	{object}	CubeModel.HBAManageResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		500	{object}	HTTP500InternalServerError
 //	@Router			/cube/hba/manage [post]
 func HBAManage(context *gin.Context) {
-	var req HBAManageRequest
-	if err := context.ShouldBindJSON(&req); err != nil {
-		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
-			ErrCode: http.StatusBadRequest,
-			Message: "invalid request",
-		})
-		return
+	req := HBAManageRequest{Action: "list-hba-wwn"}
+	if context.Request.Body != nil && context.Request.ContentLength != 0 {
+		if err := context.ShouldBindJSON(&req); err != nil {
+			context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
+				ErrCode: http.StatusBadRequest,
+				Message: "invalid request",
+			})
+			return
+		}
 	}
 	if err := normalizeHBAManageRequest(&req); err != nil {
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
@@ -78,7 +79,7 @@ func normalizeHBAManageRequest(req *HBAManageRequest) error {
 		return fmt.Errorf("request required")
 	}
 	switch strings.ToLower(strings.TrimSpace(req.Action)) {
-	case "list-hba-wwn", "list":
+	case "", "list-hba-wwn", "list":
 		req.Action = "list-hba-wwn"
 	default:
 		return fmt.Errorf("unsupported action")

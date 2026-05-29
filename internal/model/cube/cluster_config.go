@@ -131,6 +131,8 @@ type ClusterApplyRequest struct {
 	CCVM *ClusterCCVMConfig `json:"ccvm,omitempty"`
 	// management NIC config
 	MngtNic *ClusterMngtNicConfig `json:"mngtNic,omitempty"`
+	// security config for internal fan-out calls
+	Security *ClusterSecurityConfig `json:"security,omitempty" swaggerignore:"true"`
 	// ccvm management IP (internal)
 	CCVMMngtIP string `json:"-"`
 	// management NIC CIDR (internal)
@@ -149,20 +151,27 @@ type ClusterApplyRequest struct {
 	ExcludeHostname string `json:"exclude_hostname" example:"ablecube31-2"`
 	// remove hostname
 	RemoveHostname string `json:"remove_hostname" example:"ablecube31-3"`
-	// target hostname (alias of remove_hostname)
-	TargetHostname string `json:"target_hostname" example:"ablecube31-3"`
+	// target hostname (deprecated alias of remove_hostname)
+	TargetHostname string `json:"target_hostname,omitempty" swaggerignore:"true"`
 	// new hostname (option=add: exclude scvm fanout)
 	NewHostname string `json:"new_hostname,omitempty" example:"ablecube12-3"`
 	// external timeserver
 	ExternalTimeserver string `json:"external_timeserver" example:"time.google.com"`
 	// external timeserver (deprecated typo)
-	DeprecatedExtenalTimeserver string `json:"extenal_timeserver,omitempty"`
+	DeprecatedExtenalTimeserver string `json:"extenal_timeserver,omitempty" swaggerignore:"true"`
 	// iscsi storage usage (true/false)
 	IscsiStorage string `json:"iscsi_storage" example:"false"`
 	// hosts list (preferred)
 	Hosts []ClusterHost `json:"hosts"`
 	// existing hostnames from cluster.json (internal)
 	ExistingHostnames []string `json:"-"`
+}
+
+// ClusterSecurityConfig describes security settings stored at cluster.json root.
+// @name ClusterSecurityConfig
+type ClusterSecurityConfig struct {
+	// internal token for API server fan-out calls
+	InternalToken string `json:"internal_token,omitempty"`
 }
 
 // ClusterHost describes a single host item.
@@ -205,7 +214,7 @@ type ClusterApplyLocalResponse struct {
 type ClusterHealthTargetResult struct {
 	// target role (host/scvm/ccvm)
 	Role string `json:"role" example:"host"`
-	// hostname for host/scvm targets
+	// role display name. host uses hosts[].hostname, scvm uses scvm+index, ccvm uses ccvm.
 	Hostname string `json:"hostname,omitempty" example:"ablecube12-1"`
 	// target IP
 	Target string `json:"target" example:"10.10.31.1"`

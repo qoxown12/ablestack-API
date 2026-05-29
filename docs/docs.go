@@ -29,8 +29,58 @@ const docTemplate = `{
         }
     ],
     "paths": {
+        "/auth/apply": {
+            "post": {
+                "description": "내부 호출로 전달받은 API 인증 값을 현재 호스트에 적용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Apply Auth",
+                "parameters": [
+                    {
+                        "description": "auth apply request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_auth.AuthApplyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
+                "security": [],
                 "description": "웹 UI/API용 access token을 발급합니다.",
                 "consumes": [
                     "application/json"
@@ -42,7 +92,6 @@ const docTemplate = `{
                     "Auth"
                 ],
                 "summary": "Login",
-                "security": [],
                 "parameters": [
                     {
                         "description": "login request",
@@ -90,6 +139,60 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/sync": {
+            "post": {
+                "description": "현재 호스트의 API 인증 값을 선택한 대상(host/scvm/ccvm/all) API 서버에 동기화합니다. host는 hosts[].ablecube, scvm은 hosts[].scvm, ccvm은 ccvm.ip를 사용합니다. ablestack-vm/ablestack-standalone의 all은 host,ccvm만 포함합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Sync Auth",
+                "parameters": [
+                    {
+                        "description": "sync request",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_auth.AuthSyncRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_auth.AuthSyncResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -549,7 +652,7 @@ const docTemplate = `{
         },
         "/cube/cloudinit/ccvm/generate": {
             "post": {
-                "description": "cluster.json과 선택 입력된 service network 정보를 기준으로 CCVM cloud-init ISO를 생성하고 hosts[].ablecube에 복사합니다.",
+                "description": "cluster.json과 선택 입력된 service network 정보를 기준으로 CCVM cloud-init ISO를 생성하고 대상 ablecube host에 복사합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -567,52 +670,6 @@ const docTemplate = `{
                         "in": "body",
                         "schema": {
                             "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.CCVMCloudInitCreateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.GenCloudInitResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
-                        }
-                    }
-                }
-            }
-        },
-        "/cube/cloudinit/generate": {
-            "post": {
-                "description": "CCVM/SCVM cloud-init ISO를 생성합니다.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CUBE - CloudInit"
-                ],
-                "summary": "Generate Cloud-Init ISO",
-                "parameters": [
-                    {
-                        "description": "cloud-init generate request",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.GenCloudInitRequest"
                         }
                     }
                 ],
@@ -721,7 +778,7 @@ const docTemplate = `{
         },
         "/cube/cluster/apply": {
             "post": {
-                "description": "입력된 hosts 수만큼 각 노드 API로 fan-out 호출합니다.",
+                "description": "입력된 hosts 수만큼 각 노드 API로 fan-out 호출합니다. insert 적용 시 각 노드에서 시간 서버 설정도 함께 적용합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -773,7 +830,7 @@ const docTemplate = `{
         },
         "/cube/cluster/apply-local": {
             "post": {
-                "description": "로컬 노드에서만 cluster_config CLI를 실행합니다.",
+                "description": "로컬 노드에서만 cluster_config CLI를 실행합니다. insert 적용 시 시간 서버 설정도 함께 적용합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -866,7 +923,7 @@ const docTemplate = `{
         },
         "/cube/cluster/health": {
             "get": {
-                "description": "API 서버 생존 확인 및 대상 노드 상태 확인",
+                "description": "API 서버 생존 확인 및 대상 노드 상태 확인. option은 host,scvm,ccvm을 콤마로 여러 개 지정할 수 있습니다. target_hostname은 role별 표시 이름을 콤마로 지정합니다(host는 hosts[].hostname, scvm은 scvm1/scvm2, ccvm은 ccvm). option 없이 target_hostname만 지정하면 이름으로 role을 추론합니다.",
                 "consumes": [
                     "application/x-www-form-urlencoded"
                 ],
@@ -880,13 +937,13 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "host|scvm|ccvm",
+                        "description": "host,scvm,ccvm",
                         "name": "option",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "comma-separated hostnames",
+                        "description": "comma-separated role names",
                         "name": "target_hostname",
                         "in": "query"
                     }
@@ -1194,7 +1251,7 @@ const docTemplate = `{
         },
         "/cube/glue/config/update": {
             "post": {
-                "description": "/etc/ceph 설정을 생성하거나 pcsCluster.hostnameN에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다.",
+                "description": "/etc/ceph 설정을 생성하거나 pcsCluster.hostnameN에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다. 요청 body 없이 호출합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1205,16 +1262,6 @@ const docTemplate = `{
                     "CUBE - Glue Config"
                 ],
                 "summary": "Update Glue Config",
-                "parameters": [
-                    {
-                        "description": "glue config update request",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.GlueConfigUpdateRequest"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1314,7 +1361,7 @@ const docTemplate = `{
         },
         "/cube/hba/manage": {
             "post": {
-                "description": "cluster.json hosts[].ablecube 대상 API를 호출해 호스트별 HBA WWN을 조회합니다. SSH는 사용하지 않습니다.",
+                "description": "cluster.json hosts[].ablecube 대상 API를 호출해 호스트별 HBA WWN을 조회합니다. SSH는 사용하지 않으며 요청 body 없이 호출합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1325,17 +1372,6 @@ const docTemplate = `{
                     "CUBE - HBA"
                 ],
                 "summary": "HBA Manage",
-                "parameters": [
-                    {
-                        "description": "hba manage request",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.HBAManageRequest"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1792,6 +1828,59 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/HTTP400BadRequest"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP500InternalServerError"
+                        }
+                    }
+                }
+            }
+        },
+        "/cube/ssh/key": {
+            "post": {
+                "description": "/root/.ssh/id_rsa, id_rsa.pub, authorized_keys 파일을 생성하거나 암호화된 단일 파일로 다운로드/업로드합니다.",
+                "consumes": [
+                    "application/json",
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json",
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "CUBE - SSH"
+                ],
+                "summary": "SSH Key Management",
+                "parameters": [
+                    {
+                        "description": "ssh key request",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.SSHKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.SSHKeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP400BadRequest"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.SSHKeyResponse"
                         }
                     },
                     "500": {
@@ -5082,10 +5171,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "ablecube31-2"
                 },
-                "extenal_timeserver": {
-                    "description": "external timeserver (deprecated typo)",
-                    "type": "string"
-                },
                 "external_timeserver": {
                     "description": "external timeserver",
                     "type": "string",
@@ -5135,11 +5220,6 @@ const docTemplate = `{
                 },
                 "remove_hostname": {
                     "description": "remove hostname",
-                    "type": "string",
-                    "example": "ablecube31-3"
-                },
-                "target_hostname": {
-                    "description": "target hostname (alias of remove_hostname)",
                     "type": "string",
                     "example": "ablecube31-3"
                 },
@@ -5318,7 +5398,7 @@ const docTemplate = `{
                     "example": 200
                 },
                 "hostname": {
-                    "description": "hostname for host/scvm targets",
+                    "description": "role display name. host uses hosts[].hostname, scvm uses scvm+index, ccvm uses ccvm.",
                     "type": "string",
                     "example": "ablecube12-1"
                 },
@@ -5936,126 +6016,6 @@ const docTemplate = `{
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_cube.GenCloudInitRequest": {
-            "type": "object",
-            "properties": {
-                "cn_ip": {
-                    "description": "cluster IP for scvm",
-                    "type": "string",
-                    "example": "10.10.14.152"
-                },
-                "cn_nic": {
-                    "description": "cluster NIC for scvm",
-                    "type": "string",
-                    "example": "ens14"
-                },
-                "cn_prefix": {
-                    "description": "cluster prefix for scvm",
-                    "type": "integer",
-                    "example": 24
-                },
-                "dns": {
-                    "description": "management DNS",
-                    "type": "string",
-                    "example": "8.8.8.8"
-                },
-                "hostname": {
-                    "description": "VM hostname",
-                    "type": "string",
-                    "example": "scvm1"
-                },
-                "hosts": {
-                    "description": "hosts file path",
-                    "type": "string",
-                    "example": "/etc/hosts"
-                },
-                "iso_path": {
-                    "description": "output ISO path",
-                    "type": "string",
-                    "example": "/var/lib/libvirt/images/scvm-cloudinit.iso"
-                },
-                "master": {
-                    "description": "scvm master flag",
-                    "type": "boolean",
-                    "example": false
-                },
-                "mgmt_gw": {
-                    "description": "management gateway",
-                    "type": "string",
-                    "example": "10.10.0.1"
-                },
-                "mgmt_ip": {
-                    "description": "management IP",
-                    "type": "string",
-                    "example": "10.10.14.150"
-                },
-                "mgmt_nic": {
-                    "description": "management NIC name",
-                    "type": "string",
-                    "example": "ens12"
-                },
-                "mgmt_prefix": {
-                    "description": "management prefix",
-                    "type": "integer",
-                    "example": 16
-                },
-                "pn_ip": {
-                    "description": "storage IP for scvm",
-                    "type": "string",
-                    "example": "10.10.14.151"
-                },
-                "pn_nic": {
-                    "description": "storage NIC for scvm",
-                    "type": "string",
-                    "example": "ens13"
-                },
-                "pn_prefix": {
-                    "description": "storage prefix for scvm",
-                    "type": "integer",
-                    "example": 24
-                },
-                "privkey": {
-                    "description": "private key file path",
-                    "type": "string",
-                    "example": "/root/.ssh/id_rsa"
-                },
-                "pubkey": {
-                    "description": "public key file path",
-                    "type": "string",
-                    "example": "/root/.ssh/id_rsa.pub"
-                },
-                "sn_dns": {
-                    "description": "service DNS for ccvm",
-                    "type": "string",
-                    "example": "8.8.8.8"
-                },
-                "sn_gw": {
-                    "description": "service gateway for ccvm",
-                    "type": "string",
-                    "example": "10.10.0.1"
-                },
-                "sn_ip": {
-                    "description": "service IP for ccvm",
-                    "type": "string",
-                    "example": "10.10.14.151"
-                },
-                "sn_nic": {
-                    "description": "service NIC for ccvm",
-                    "type": "string",
-                    "example": "ens13"
-                },
-                "sn_prefix": {
-                    "description": "service prefix for ccvm",
-                    "type": "integer",
-                    "example": 16
-                },
-                "type": {
-                    "description": "vm type: ccvm/scvm",
-                    "type": "string",
-                    "example": "scvm"
-                }
-            }
-        },
         "ablecloud_io_ablestack-api_internal_model_cube.GenCloudInitResponse": {
             "type": "object",
             "properties": {
@@ -6173,16 +6133,6 @@ const docTemplate = `{
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_cube.GlueConfigUpdateRequest": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "description": "action: update",
-                    "type": "string",
-                    "example": "update"
-                }
-            }
-        },
         "ablecloud_io_ablestack-api_internal_model_cube.GlueConfigUpdateResponse": {
             "type": "object",
             "properties": {
@@ -6237,16 +6187,6 @@ const docTemplate = `{
                 "target": {
                     "type": "string",
                     "example": "10.10.31.1"
-                }
-            }
-        },
-        "ablecloud_io_ablestack-api_internal_model_cube.HBAManageRequest": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "description": "action: list-hba-wwn",
-                    "type": "string",
-                    "example": "list-hba-wwn"
                 }
             }
         },
@@ -6853,6 +6793,48 @@ const docTemplate = `{
                     "type": "string",
                     "example": "/etc/ablestack/vmconfig/scvm/scvm.xml"
                 }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.SSHKeyRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "action: generate/download/upload",
+                    "type": "string",
+                    "example": "generate"
+                },
+                "bits": {
+                    "description": "generate 액션에서 사용할 RSA key bit 수. 비어 있으면 4096을 사용한다.",
+                    "type": "integer",
+                    "example": 4096
+                },
+                "overwrite": {
+                    "description": "기존 파일이 있으면 덮어쓴다. 기본값은 true다.",
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.SSHKeyResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "example": "generate"
+                },
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "retname": {
+                    "type": "string",
+                    "example": "SSH Key"
+                },
+                "val": {}
             }
         },
         "ablecloud_io_ablestack-api_internal_model_cube.SecurityPatchRequest": {
@@ -7497,6 +7479,91 @@ const docTemplate = `{
                 }
             }
         },
+        "ablecloud_io_ablestack-api_internal_service_authservice.TokenClaim": {
+            "type": "object",
+            "properties": {
+                "exp": {
+                    "type": "integer"
+                },
+                "iat": {
+                    "type": "integer"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "sub": {
+                    "type": "string"
+                },
+                "use": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_auth.AuthApplyRequest": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_auth.AuthSyncRequest": {
+            "type": "object",
+            "properties": {
+                "option": {
+                    "type": "string",
+                    "enum": [
+                        "host",
+                        "scvm",
+                        "ccvm",
+                        "all"
+                    ],
+                    "example": "all"
+                }
+            }
+        },
+        "internal_handler_auth.AuthSyncResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "message": {
+                    "type": "string"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler_auth.AuthSyncResult"
+                    }
+                },
+                "val": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "internal_handler_auth.AuthSyncResult": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "hostname": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler_auth.LoginRequest": {
             "type": "object",
             "properties": {
@@ -7542,27 +7609,7 @@ const docTemplate = `{
                     "example": 200
                 },
                 "val": {
-                    "$ref": "#/definitions/internal_handler_auth.tokenClaim"
-                }
-            }
-        },
-        "internal_handler_auth.tokenClaim": {
-            "type": "object",
-            "properties": {
-                "exp": {
-                    "type": "integer"
-                },
-                "iat": {
-                    "type": "integer"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "sub": {
-                    "type": "string"
-                },
-                "use": {
-                    "type": "string"
+                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_service_authservice.TokenClaim"
                 }
             }
         },
@@ -7614,10 +7661,10 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "BearerAuth": {
-            "description": "Enter the token with the ` + "`" + `Bearer ` + "`" + ` prefix, e.g. ` + "`" + `Bearer eyJ...` + "`" + `",
             "type": "apiKey",
             "name": "Authorization",
-            "in": "header"
+            "in": "header",
+            "description": "Enter the token with the Bearer prefix, e.g. Bearer eyJ..."
         }
     },
     "externalDocs": {

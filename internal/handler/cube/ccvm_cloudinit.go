@@ -24,7 +24,7 @@ const (
 // CreateCCVMCloudInit godoc
 //
 //	@Summary		Create CCVM Cloud-Init ISO
-//	@Description	cluster.json과 선택 입력된 service network 정보를 기준으로 CCVM cloud-init ISO를 생성하고 hosts[].ablecube에 복사합니다.
+//	@Description	cluster.json과 선택 입력된 service network 정보를 기준으로 CCVM cloud-init ISO를 생성하고 대상 ablecube host에 복사합니다.
 //	@Tags			CUBE - CloudInit
 //	@Accept			json
 //	@Produce		json
@@ -34,9 +34,14 @@ const (
 //	@Failure		500	{object}	HTTP500InternalServerError
 //	@Router			/cube/cloudinit/ccvm/generate [post]
 func CreateCCVMCloudInit(context *gin.Context) {
+	started := time.Now()
+	clientIP, method, path := ccvmCloudInitRequestInfo(context)
+	appendAbleStackAPILog("ccvm_cloudinit", "event=start client=%q method=%s path=%s", clientIP, method, path)
+
 	var req CCVMCloudInitCreateRequest
 	if context.Request.Body != nil && context.Request.ContentLength != 0 {
 		if err := context.ShouldBindJSON(&req); err != nil {
+			appendAbleStackAPILog("ccvm_cloudinit", "event=invalid_request client=%q error=%q elapsed=%s", clientIP, err.Error(), time.Since(started))
 			context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 				ErrCode: http.StatusBadRequest,
 				Message: "invalid request",
@@ -45,6 +50,7 @@ func CreateCCVMCloudInit(context *gin.Context) {
 		}
 	}
 	if err := normalizeCCVMCloudInitCreateRequest(&req); err != nil {
+		appendAbleStackAPILog("ccvm_cloudinit", "event=bad_request client=%q error=%q elapsed=%s", clientIP, err.Error(), time.Since(started))
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
 			Message: err.Error(),
@@ -54,6 +60,7 @@ func CreateCCVMCloudInit(context *gin.Context) {
 
 	cfg, err := loadClusterConfigSection()
 	if err != nil {
+		appendAbleStackAPILog("ccvm_cloudinit", "event=cluster_config_failed client=%q error=%q elapsed=%s", clientIP, err.Error(), time.Since(started))
 		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
 			ErrCode: http.StatusInternalServerError,
 			Message: "failed to read cluster.json",
@@ -63,6 +70,7 @@ func CreateCCVMCloudInit(context *gin.Context) {
 
 	genReq, err := buildCreateCCVMCloudInitRequest(cfg, req)
 	if err != nil {
+		appendAbleStackAPILog("ccvm_cloudinit", "event=build_request_failed client=%q error=%q elapsed=%s", clientIP, err.Error(), time.Since(started))
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
 			Message: err.Error(),
@@ -70,22 +78,35 @@ func CreateCCVMCloudInit(context *gin.Context) {
 		return
 	}
 
-	targets := ccvmCloudInitAblecubePnTargets(cfg)
+	targets, targetField := ccvmCloudInitCopyTargets(cfg)
+	appendAbleStackAPILog(
+		"ccvm_cloudinit",
+		"event=targets client=%q cluster_type=%q iscsi_storage=%q target_field=%s target_count=%d targets=%q",
+		clientIP,
+		strings.TrimSpace(cfg.Type),
+		strings.TrimSpace(cfg.IscsiStorage),
+		targetField,
+		len(targets),
+		formatHosts(targets),
+	)
 	if len(targets) == 0 {
+		appendAbleStackAPILog("ccvm_cloudinit", "event=no_targets client=%q target_field=%s elapsed=%s", clientIP, targetField, time.Since(started))
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
-			Message: "hosts[].ablecubePn required",
+			Message: targetField + " required",
 		})
 		return
 	}
 
 	resp := runGenCloudInit(genReq, cfg)
 	if resp.Code != http.StatusOK {
+		appendAbleStackAPILog("ccvm_cloudinit", "event=generate_failed client=%q code=%d message=%q elapsed=%s", clientIP, resp.Code, resp.Message, time.Since(started))
 		context.JSON(statusCodeFromGenCloudInitResponse(resp), resp)
 		return
 	}
 
 	if err := copyCCVMCloudInitISOToTargets(targets); err != nil {
+		appendAbleStackAPILog("ccvm_cloudinit", "event=copy_failed client=%q target_field=%s target_count=%d error=%q elapsed=%s", clientIP, targetField, len(targets), err.Error(), time.Since(started))
 		resp.Code = http.StatusInternalServerError
 		resp.Message = err.Error()
 		context.JSON(http.StatusInternalServerError, resp)
@@ -93,7 +114,19 @@ func CreateCCVMCloudInit(context *gin.Context) {
 	}
 
 	resp.Message = ccvmCloudInitSuccessMessage
+	appendAbleStackAPILog("ccvm_cloudinit", "event=success client=%q iso_path=%q target_field=%s target_count=%d elapsed=%s", clientIP, ccvmCloudInitISOPath, targetField, len(targets), time.Since(started))
 	context.JSON(http.StatusOK, resp)
+}
+
+func ccvmCloudInitRequestInfo(context *gin.Context) (string, string, string) {
+	if context == nil || context.Request == nil {
+		return "", "", ""
+	}
+	path := context.FullPath()
+	if path == "" && context.Request.URL != nil {
+		path = context.Request.URL.Path
+	}
+	return context.ClientIP(), context.Request.Method, path
 }
 
 func normalizeCCVMCloudInitCreateRequest(req *CCVMCloudInitCreateRequest) error {
@@ -152,27 +185,47 @@ func buildCreateCCVMCloudInitRequest(cfg *CubeModel.ClusterConfigSection, req CC
 	return genReq, nil
 }
 
-func ccvmCloudInitAblecubePnTargets(cfg *CubeModel.ClusterConfigSection) []string {
+func ccvmCloudInitCopyTargets(cfg *CubeModel.ClusterConfigSection) ([]string, string) {
+	const (
+		ablecubeField   = "hosts[].ablecube"
+		ablecubePnField = "hosts[].ablecubePn"
+	)
 	if cfg == nil {
-		return nil
+		return nil, ablecubePnField
 	}
+
+	useAblecube := strings.EqualFold(strings.TrimSpace(cfg.Type), "ablestack-vm") &&
+		!strings.EqualFold(strings.TrimSpace(cfg.IscsiStorage), "true")
+	targetField := ablecubePnField
+	if useAblecube {
+		targetField = ablecubeField
+	}
+
 	targets := make([]string, 0, len(cfg.Hosts))
 	for _, host := range cfg.Hosts {
-		if target := strings.TrimSpace(host.AblecubePn); target != "" {
+		target := host.AblecubePn
+		if useAblecube {
+			target = host.Ablecube
+		}
+		if target = strings.TrimSpace(target); target != "" {
 			targets = append(targets, target)
 		}
 	}
-	return dedupeHosts(targets)
+	return dedupeHosts(targets), targetField
 }
 
 func copyCCVMCloudInitISOToTargets(targets []string) error {
 	for _, target := range targets {
 		if isLocalTarget(target) {
+			appendAbleStackAPILog("ccvm_cloudinit", "event=copy_skip_local target=%q", target)
 			continue
 		}
+		appendAbleStackAPILog("ccvm_cloudinit", "event=copy_start target=%q iso_path=%q", target, ccvmCloudInitISOPath)
 		if err := copyCCVMCloudInitISOToTarget(target); err != nil {
+			appendAbleStackAPILog("ccvm_cloudinit", "event=copy_target_failed target=%q error=%q", target, err.Error())
 			return err
 		}
+		appendAbleStackAPILog("ccvm_cloudinit", "event=copy_target_success target=%q", target)
 	}
 	return nil
 }

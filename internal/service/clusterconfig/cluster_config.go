@@ -46,6 +46,7 @@ type Args struct {
 	RemoveHostname     string
 	ExternalTimeserver string
 	IscsiStorage       string
+	InternalToken      string
 	Verbose            int
 	Human              bool
 }
@@ -81,6 +82,7 @@ type ApplyRequest struct {
 	RemoveHostname     string            `json:"remove_hostname"`
 	ExternalTimeserver string            `json:"external_timeserver"`
 	IscsiStorage       string            `json:"iscsi_storage"`
+	Security           map[string]string `json:"security,omitempty"`
 }
 
 // RunCLI executes the legacy CLI behavior.
@@ -113,6 +115,9 @@ func ApplyLocal(action string, req CubeModel.ClusterApplyRequest) (CubeModel.Clu
 		RemoveHostname:     req.RemoveHostname,
 		ExternalTimeserver: req.ExternalTimeserver,
 		IscsiStorage:       req.IscsiStorage,
+	}
+	if req.Security != nil {
+		args.InternalToken = strings.TrimSpace(req.Security.InternalToken)
 	}
 
 	result := applyArgs(args)
@@ -467,7 +472,6 @@ func NormalizeClusterJSON(root map[string]any) map[string]any {
 			delete(cfg, "extenal_timeserver")
 		}
 	}
-
 	ordered := orderedClusterConfig{
 		Type:               getString(cfg["type"]),
 		BackupPath:         getString(cfg["backup_path"]),
@@ -847,6 +851,10 @@ func insert(clusterPath string, args Args) Result {
 	root, cfg, err := loadClusterJSON(clusterPath)
 	if err != nil {
 		return resultError("cluster.json read error")
+	}
+	if strings.TrimSpace(args.InternalToken) != "" {
+		security := ensureMap(root, "security")
+		security["internal_token"] = strings.TrimSpace(args.InternalToken)
 	}
 
 	if args.Type != "" {
@@ -1497,6 +1505,9 @@ func callApplyLocalAPI(target string, action string, args Args) (Result, error) 
 		RemoveHostname:     args.RemoveHostname,
 		ExternalTimeserver: args.ExternalTimeserver,
 		IscsiStorage:       args.IscsiStorage,
+	}
+	if strings.TrimSpace(args.InternalToken) != "" {
+		req.Security = map[string]string{"internal_token": strings.TrimSpace(args.InternalToken)}
 	}
 
 	body, err := json.Marshal(req)

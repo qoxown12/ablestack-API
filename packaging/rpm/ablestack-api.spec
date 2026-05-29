@@ -40,14 +40,16 @@ if [ -d vendor ]; then
     export GOFLAGS="${GOFLAGS:-} -mod=vendor"
 fi
 go build -buildvcs=false -trimpath -ldflags "-s -w" -o %{name} ./cmd/apiserver
+go build -buildvcs=false -trimpath -ldflags "-s -w" -o ablestack-auth-token ./cmd/authtoken
 
 %check
 %if %{with tests}
-go test ./internal/model/cube ./internal/service/clusterconfig ./docs
+go test ./internal/model/cube ./internal/service/clusterconfig ./internal/service/authservice ./cmd/authtoken ./docs
 %endif
 
 %install
 install -Dpm 0755 %{name} %{buildroot}%{_bindir}/%{name}
+install -Dpm 0755 ablestack-auth-token %{buildroot}%{_bindir}/ablestack-auth-token
 install -Dpm 0644 packaging/systemd/%{service_name}.service %{buildroot}%{_unitdir}/%{service_name}.service
 install -Dpm 0755 packaging/scripts/merge-json-defaults.py %{buildroot}%{_libexecdir}/%{name}/merge-json-defaults.py
 
@@ -118,6 +120,7 @@ fi
 %license LICENSE
 %doc README.md CHANGELOG.md VERSION
 %{_bindir}/%{name}
+%{_bindir}/ablestack-auth-token
 %{_unitdir}/%{service_name}.service
 %{_libexecdir}/%{name}/merge-json-defaults.py
 %dir %{config_root}
@@ -136,6 +139,7 @@ fi
 
 %changelog
 * Tue May 26 2026 ABLECLOUD <support@ablecloud.io> - 0.1.1-1
+- Add Cockpit session token helper CLI.
 - Add deployment status API for UI stage handling.
 - Add dynamic PCS cluster target handling up to 16 hosts.
 - Separate PCS validation rules by ABLESTACK deployment type.

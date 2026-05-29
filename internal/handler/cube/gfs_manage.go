@@ -29,6 +29,7 @@ const (
 	gfsManageShortTimeout     = 30 * time.Second
 	gfsManageLVMConfPath      = "/etc/lvm/lvm.conf"
 	gfsManageAlertLogPath     = "/var/log/pcmk_alert_file.log"
+	gfsManageAlertDetailPath  = "/var/log/pcmk_alert_detail.log"
 	gfsManageHCIFilesystem    = "ablestack-hci-filesystem"
 	gfsManageResourceCleanup  = "resource-cleanup"
 	gfsManagePrepareAlertFile = "prepare-alert-file"
@@ -897,17 +898,26 @@ func runGFSManageIPMICheck(devices []GFSManageStonithDevice) (any, error) {
 }
 
 func prepareGFSManageAlertFile() error {
-	file, err := os.OpenFile(gfsManageAlertLogPath, os.O_CREATE, 0600)
+	for _, path := range []string{gfsManageAlertLogPath, gfsManageAlertDetailPath} {
+		if err := prepareGFSManageAlertLogFile(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func prepareGFSManageAlertLogFile(path string) error {
+	file, err := os.OpenFile(path, os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
 	if err := file.Close(); err != nil {
 		return err
 	}
-	if _, err := runGFSManageCommand(gfsManageShortTimeout, "chown", "hacluster:haclient", gfsManageAlertLogPath); err != nil {
+	if _, err := runGFSManageCommand(gfsManageShortTimeout, "chown", "hacluster:haclient", path); err != nil {
 		return err
 	}
-	return os.Chmod(gfsManageAlertLogPath, 0600)
+	return os.Chmod(path, 0600)
 }
 
 func createGFSManageAlert() error {

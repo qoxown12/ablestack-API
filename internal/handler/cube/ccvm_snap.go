@@ -546,10 +546,10 @@ func buildCCVMSnapPCSTargets(cfg *CubeModel.ClusterConfigSection) []ccvmSnapPCST
 			continue
 		}
 		host, ok := findCCVMSnapHostByPCSIP(cfg, pcsIP)
-		if !ok || strings.TrimSpace(host.Ablecube) == "" {
+		target := ccvmHostAPITarget(cfg, host)
+		if !ok || target == "" {
 			continue
 		}
-		target := strings.TrimSpace(host.Ablecube)
 		if _, exists := seen[target]; exists {
 			continue
 		}
@@ -564,8 +564,11 @@ func buildCCVMSnapPCSTargets(cfg *CubeModel.ClusterConfigSection) []ccvmSnapPCST
 }
 
 func findCCVMSnapHostByPCSIP(cfg *CubeModel.ClusterConfigSection, pcsIP string) (CubeModel.ClusterHost, bool) {
+	pcsIP = strings.TrimSpace(pcsIP)
 	for _, host := range cfg.Hosts {
-		if strings.TrimSpace(host.AblecubePn) == pcsIP {
+		if strings.TrimSpace(host.AblecubePn) == pcsIP ||
+			strings.TrimSpace(host.Ablecube) == pcsIP ||
+			strings.TrimSpace(host.Hostname) == pcsIP {
 			return host, true
 		}
 	}
@@ -585,7 +588,7 @@ func resolveCCVMSnapStartedTarget(cfg *CubeModel.ClusterConfigSection, nodeName 
 			return ccvmSnapPCSTarget{
 				Hostname: strings.TrimSpace(host.Hostname),
 				PCSIP:    strings.TrimSpace(host.AblecubePn),
-				Target:   strings.TrimSpace(host.Ablecube),
+				Target:   ccvmHostAPITarget(cfg, host),
 			}, true
 		}
 	}

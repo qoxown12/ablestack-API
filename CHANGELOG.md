@@ -2,6 +2,26 @@
 
 ABLESTACK API의 변경 이력은 이 파일에 기록한다. RPM 버전은 `VERSION` 파일을 기준으로 관리한다.
 
+## [0.1.2] - 2026-05-27
+
+### Added
+
+- Cockpit 로그인 세션에서 비밀번호 재입력 없이 Bearer 토큰을 발급할 수 있도록 `ablestack-auth-token` CLI를 추가했다.
+- 클러스터 전체 API 서버의 인증 서명값을 맞출 수 있도록 `/auth/sync`, `/auth/apply` API를 추가했다.
+- `cluster apply` insert 시 `security.internal_token`을 생성하고 apply-local payload로 전파하도록 했다.
+
+### Changed
+
+- 인증 서명값은 토큰 발급 경로에서만 생성하고, API 서버 시작/토큰 검증/동기화 경로에서는 자동 생성하지 않도록 정리했다.
+- `/auth/sync`는 `host`, `scvm`, `ccvm`, `all` 옵션으로 동기화 대상을 선택하고 대상별 성공/실패 결과를 반환하도록 변경했다.
+- `/auth/sync`의 `all` 대상은 HCI 계열에서 `host/scvm/ccvm`, VM/standalone 계열에서 `host/ccvm`만 포함하도록 os_type 기준을 반영했다.
+- 정렬된 `cluster.json` 구조에서도 auth sync 대상이 정상 수집되도록 `clusterConfig` 읽기 로직을 보완했다.
+- 대상 호스트의 `security.internal_token`이 비어 있거나 다른 값이면 `/auth/sync`를 실행한 호스트의 internal token과 인증 서명값으로 덮어쓰도록 보완했다.
+- cloud-init ISO 생성은 CCVM/SCVM 전용 API만 노출하고, 파일 경로와 NIC/IP를 모두 받던 저수준 `/cube/cloudinit/generate` POST API는 제거했다.
+- 단일 동작만 수행하는 HBA 조회와 Glue config 동기화 POST API는 Swagger에서 요청 body를 제거하고 기존 body 입력은 호환만 유지하도록 정리했다.
+- `/cube/cluster/health`의 `option`은 `host,scvm`처럼 콤마 조합을 허용하고, `target_hostname`은 host/scvm/ccvm 역할별 표시 이름을 콤마로 지정할 수 있도록 정리했다. `option` 없이 `target_hostname`만 지정하면 이름으로 role을 추론한다.
+- Swagger 요청 body에서 내부 fan-out용 `security`, deprecated alias 필드를 숨겨 화면에서 불필요한 값을 보내지 않도록 정리했다.
+
 ## [0.1.1] - 2026-05-26
 
 ### Added

@@ -90,6 +90,7 @@ RPM 설치 경로:
 | 항목 | 경로 |
 | --- | --- |
 | API binary | `/usr/bin/ablestack-api` |
+| Cockpit auth helper | `/usr/bin/ablestack-auth-token` |
 | systemd unit | `/usr/lib/systemd/system/ablestack-api.service` |
 | service env | `/etc/ablestack/ablestack-api.env` |
 | runtime config | `/etc/ablestack/config.json` |
@@ -99,6 +100,10 @@ RPM 설치 경로:
 | generated VM config | `/etc/ablestack/vmconfig` |
 
 `/etc/ablestack` 아래 설정 파일은 RPM spec에서 `%config(noreplace)`로 관리합니다. 업데이트 시 기존 파일은 덮어쓰지 않고, `config.json`과 `properties/cluster.json`은 새 RPM의 `.rpmnew`가 생기면 누락된 JSON key만 병합합니다. 기존 값과 운영 데이터는 유지됩니다.
+
+Cockpit UI에서는 로그인된 Linux 세션을 기준으로 `/usr/bin/ablestack-auth-token`을 실행해 Bearer 토큰을 자동 발급할 수 있습니다. 기본 JSON 출력의 `authorization` 값을 이후 API 요청의 `Authorization` 헤더에 사용하면 됩니다. 인증 서명값이 비어 있으면 helper 실행 시 생성됩니다.
+
+`cluster apply`는 insert 시 `security.internal_token`을 생성하고 `apply-local` payload에 포함해 각 호스트 `cluster.json`에 같은 값을 저장합니다. 클러스터 구성 후에는 `POST /api/v1/auth/sync`를 호출해 선택한 API 서버의 인증 서명값을 맞춥니다. `option`은 `host`, `scvm`, `ccvm`, `all`을 지원하며, 각각 `hosts[].ablecube`, `hosts[].scvm`, `ccvm.ip`를 대상으로 사용합니다. `all`은 HCI 계열에서는 `host/scvm/ccvm`, VM/standalone 계열에서는 `host/ccvm`만 포함합니다. 이 API는 내부 apply 호출에 `cluster.json`의 `security.internal_token`을 `X-Cube-Internal-Token` 헤더로 자동 첨부하고, 대상별 성공/실패 결과를 반환합니다.
 
 ## API Base URL
 

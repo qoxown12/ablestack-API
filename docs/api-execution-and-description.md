@@ -220,7 +220,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | 디스크 | GET | `/cube/disk` | `action=list,gfs,rbd,detail`, `view=tree,flat,list` | 디스크, multipath, RBD, RAID controller 정보 조회 |
 | 네트워크 | GET | `/cube/nics` | `action=list,detail` | ethernet, bridge, bond, IP, MAC, speed 조회 |
 | 호스트 | GET | `/cube/hosts` | 없음 | `/etc/hosts`를 네트워크/역할별로 조회 |
-| 클러스터 | GET | `/cube/cluster/health` | `option=host,scvm,ccvm` | API 생존 및 대상 노드 상태 점검 |
+| 클러스터 | GET | `/cube/cluster/health` | `option=host,scvm,ccvm` 콤마 조합 | API 생존 및 대상 노드 상태 점검 |
 | 배포 상태 | GET | `/cube/deploy/status` | 없음 | UI용 배포 단계 enum과 기존 상태 스냅샷 조회 |
 | 클러스터 | GET | `/cube/cluster/config` | 없음 | `cluster.json`의 `clusterConfig` 조회 |
 | 클러스터 | POST | `/cube/cluster/apply` | `insert,remove,reset,check` | 클러스터 구성 오케스트레이션 |
@@ -228,7 +228,6 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | System Profile | GET | `/cube/system/config` | 없음 | `systemProfile` 조회 |
 | System Profile | POST | `/cube/system/config` | `status,update,allUpdate,reset` | `systemProfile` 조회/수정/초기화 |
 | URL | GET | `/cube/url` | `option=cloudCenter,wallCenter,storageCenter` | Cloud/Wall/Storage 접속 URL 반환 |
-| CloudInit | POST | `/cube/cloudinit/generate` | body | 수동 파라미터 기반 CCVM/SCVM cloud-init ISO 생성 |
 | CloudInit | POST | `/cube/cloudinit/ccvm/generate` | body optional | `cluster.json` 기반 CCVM cloud-init ISO 생성 및 ablecubePn 대상 복사 |
 | CloudInit | POST | `/cube/cloudinit/scvm/generate` | 없음 | 현재 노드와 `cluster.json` 기반 SCVM cloud-init ISO 생성 |
 | CCVM | GET | `/cube/ccvm/status` | 없음 | CCVM 상태 조회 |
@@ -251,6 +250,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | License | POST | `/cube/license` | `status,register` | 라이선스 조회/등록 |
 | Version | POST | `/cube/version/update` | `info,run` | 마운트된 ISO 버전 조회/업데이트 |
 | Security | POST | `/cube/security/patch` | body flags | 보안 패치 실행 및 상태 업데이트 |
+| SSH Key | POST | `/cube/ssh/key` | `generate,download,upload` | `/root/.ssh` 키 생성, 암호화 단일 파일 다운로드/업로드 |
 | DB | POST | `/cube/db/dump` | `instantBackup,regularBackup,deleteOldBackup,checkBackup,deactiveBackup` | CCVM DB dump 및 스케줄 관리 |
 
 ## Auth API
@@ -258,6 +258,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 웹 UI/API 클라이언트는 `/auth/login`에서 발급받은 access token을 `Authorization: Bearer <token>` 형태로 사용한다.
 인증은 Linux 계정 인증만 사용하며, `/etc/ablestack/auth.json`의 `linux.allowed_users`, `linux.allowed_groups`로 허용 계정을 제한한다.
 기본값은 `root` 사용자 또는 `wheel` 그룹 사용자를 허용한다.
+인증 서명값은 API 서버 시작만으로 생성하지 않는다. `/auth/login` 성공 또는 Cockpit UI의 helper 호출 시 생성된다.
 
 ```bash
 curl -X POST http://<ablecube-ip>:8090/api/v1/auth/login \
@@ -270,6 +271,55 @@ curl http://<ablecube-ip>:8090/api/v1/auth/me \
   -H "Authorization: Bearer <access_token>"
 ```
 
+### Cockpit 자동 인증
+
+Cockpit 화면에서는 사용자가 이미 Linux 계정으로 로그인했으므로 비밀번호를 다시 입력하지 않고 로컬 helper를 실행해 Bearer 토큰을 발급한다. Cockpit에 로그인하는 것만으로는 helper가 자동 실행되지 않으며, ABLESTACK Cockpit 화면 초기화 코드에서 명시적으로 호출해야 한다. 이 시점에 인증 서명값이 비어 있으면 helper가 생성한다.
+
+```bash
+/usr/bin/ablestack-auth-token
+```
+
+기본 출력:
+
+```json
+{
+  "code": 200,
+  "token_type": "Bearer",
+  "access_token": "<jwt>",
+  "authorization": "Bearer <jwt>",
+  "expires_in": 3600,
+  "subject": "root"
+}
+```
+
+Cockpit UI에서는 `cockpit.spawn()`으로 helper를 호출하고 `authorization` 값을 `cockpit.fetch()`의 `Authorization` 헤더에 붙인다.
+
+```javascript
+const raw = await cockpit.spawn(["/usr/bin/ablestack-auth-token"]);
+const token = JSON.parse(raw).authorization;
+
+const response = await cockpit.fetch("http://127.0.0.1:8090/api/v1/cube/hosts", {
+  headers: {
+    Authorization: token
+  }
+});
+```
+
+root가 아닌 Cockpit 사용자로 로그인했지만 helper를 root 권한으로 실행해야 하는 환경에서는 현재 Cockpit 사용자를 명시한다. helper는 대상 사용자가 `auth.json`의 허용 사용자/그룹에 포함되는지 확인한다.
+
+```javascript
+const raw = await cockpit.spawn(
+  ["/usr/bin/ablestack-auth-token", "--user", cockpit.user.name],
+  { superuser: "require" }
+);
+```
+
+CLI에서 헤더 값만 필요하면:
+
+```bash
+/usr/bin/ablestack-auth-token --plain
+```
+
 라이선스 등록이 성공하면 `cluster.json`의 `security.internal_token`이 없을 때 자동으로 생성된다.
 내부 fan-out 요청은 `X-Cube-Internal-Token` 헤더를 사용하며, 토큰 교체는 아래 API로 단순화한다.
 
@@ -277,6 +327,40 @@ curl http://<ablecube-ip>:8090/api/v1/auth/me \
 curl -X POST http://<ablecube-ip>:8090/api/v1/auth/internal-token/rotate \
   -H "Authorization: Bearer <access_token>"
 ```
+
+클러스터 구성이 끝나면 API 인증 서명값을 선택한 API 서버에 동기화한다.
+
+`option` 값은 아래 대상을 사용한다.
+
+| option | 동기화 대상 |
+| --- | --- |
+| `host` | `cluster.json`의 `hosts[].ablecube` |
+| `scvm` | `cluster.json`의 `hosts[].scvm` |
+| `ccvm` | `cluster.json`의 `ccvm.ip` |
+| `all` | `ablestack-hci`, `ablestack-hci-filesystem`은 `host`, `scvm`, `ccvm` 전체 |
+| `all` | `ablestack-vm`, `ablestack-standalone`은 `host`, `ccvm` 전체 |
+
+```bash
+curl -X POST http://<ablecube-ip>:8090/api/v1/auth/sync \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"option":"all"}'
+```
+
+`option`을 생략하면 기존 호환성을 위해 `host` 기준으로 처리한다. `ablestack-vm`, `ablestack-standalone`에서 `scvm`을 직접 요청하면 지원하지 않는 option으로 실패한다. 응답의 `results`에는 대상별 `role`, `hostname`, `target`, `code`, `message`가 포함된다. 실행한 호스트 자신이 대상에 포함되면 원격 HTTP 호출 없이 `local target` 성공 결과로 표시한다.
+
+`cluster apply`는 insert 흐름에서 현재 호스트의 `security.internal_token`을 보장하고, `apply-local` 요청 body의 `security.internal_token`에 같은 값을 포함한다. 원격 호스트의 token이 아직 비어 있는 최초 bootstrap 상태에서는 body token과 `X-Cube-Internal-Token` 헤더가 일치할 때만 `apply-local`을 허용하고, 이후 원격 호스트의 `cluster.json`에 같은 token을 저장한다.
+
+`sync` API는 현재 호스트의 `/etc/ablestack/auth.json`에 있는 인증 서명값을 기준으로 한다. 값이 없으면 동기화하지 않고 실패하므로, 먼저 Cockpit helper 또는 `/auth/login`으로 토큰을 발급한 뒤 호출한다. 이때 `X-Cube-Internal-Token`은 사용자가 직접 넣지 않는다. API 서버가 `cluster.json`의 `security.internal_token` 값을 읽어 아래 내부 호출에 자동으로 붙인다.
+
+대상 호스트의 `security.internal_token`이 비어 있거나 다른 값이면 `/auth/sync`가 현재 호스트의 internal token을 함께 전달해 실행 호스트 기준으로 덮어쓴다. 이 sync apply는 `X-Cube-Internal-Token` 헤더와 body의 `internal_token`이 같고 충분히 긴 token일 때만 허용하므로 테스트용 `1` 같은 값은 사용하지 않는다.
+
+```http
+POST /api/v1/auth/apply
+X-Cube-Internal-Token: <security.internal_token>
+```
+
+`apply` API는 내부 API 서버 간 호출용이다. 사람이 Swagger나 curl에서 일반 테스트할 때 직접 호출하지 않는다.
 
 ## Cluster API
 
@@ -294,12 +378,27 @@ curl -sS http://<ablecube-ip>:8090/api/v1/cube/cluster/health
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=host"
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=scvm"
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=ccvm"
+curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=host,scvm"
 ```
 
-특정 hostname만 점검:
+특정 이름만 점검할 때는 `target_hostname`을 콤마로 여러 개 지정한다. 이름 규칙은 option별로 다르다.
+
+| option | target_hostname 이름 |
+| --- | --- |
+| `host` | `hosts[].hostname` 값. 예: `ablecube12-1`, `NV1` |
+| `scvm` | `scvm` + `hosts[].index`. 예: `scvm1`, `scvm2` |
+| `ccvm` | 고정값 `ccvm` |
 
 ```bash
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=host&target_hostname=ablecube31-1,ablecube31-2"
+curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=scvm&target_hostname=scvm1,scvm2"
+curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?option=host,scvm,ccvm&target_hostname=NV1,scvm1,ccvm"
+```
+
+`option` 없이 `target_hostname`만 지정하면 이름으로 role을 추론한다.
+
+```bash
+curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?target_hostname=NV1,scvm1,ccvm"
 ```
 
 ### `GET /cube/cluster/config`
@@ -450,14 +549,14 @@ HCI/HCI-filesystem 계열은 SCVM 관련 IP가 필요하므로 `hosts`에 아래
 
 ### `POST /cube/cluster/apply`
 
-오케스트레이터 API다. 요청을 받은 노드가 대상 host를 계산하고 각 노드의 `/cube/cluster/apply-local`을 호출한다.
+오케스트레이터 API다. 요청을 받은 노드가 대상 host를 계산하고 각 노드의 `/cube/cluster/apply-local`을 호출한다. `insert` 적용이 성공하면 각 노드에서 `/etc/chrony.conf` 생성과 `chronyd` 재시작까지 자동으로 함께 처리한다.
 
 지원 action:
 
 | Action | 설명 | 주요 필수값 |
 | --- | --- | --- |
-| `insert` | `cluster.json` 반영 및 `/etc/hosts` 재구성 | `type`, `ccvm`, `hosts`, `pcs_cluster_list`(`standalone` 제외), `iscsi_storage` |
-| `remove` | 지정 hostname 제거 | `target_hostname` 또는 `remove_hostname` |
+| `insert` | `cluster.json` 반영, `/etc/hosts` 재구성, 시간 서버 설정 적용 | `type`, `ccvm`, `hosts`, `pcs_cluster_list`(`standalone` 제외), `iscsi_storage` |
+| `remove` | 지정 hostname 제거 | `remove_hostname` |
 | `reset` | `cluster.json`을 기본값으로 초기화 | 없음 |
 | `check` | 대상 ablecube API health 확인 | `hosts`, `type`, `ccvm` 또는 기존 `cluster.json` |
 
@@ -502,7 +601,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/cube/cluster/apply \
 ```bash
 curl -X POST http://<ablecube-ip>:8090/api/v1/cube/cluster/apply \
   -H "Content-Type: application/json" \
-  -d '{"action":"remove","target_hostname":"ablecube12-3"}'
+  -d '{"action":"remove","remove_hostname":"ablecube12-3"}'
 ```
 
 `reset` 예:
@@ -620,37 +719,7 @@ curl -sS "http://<ablecube-ip>:8090/api/v1/cube/url?option=storageCenter"
 
 ## CloudInit API
 
-cloud-init API는 CCVM/SCVM 부팅에 필요한 ISO를 생성한다. 공통으로 `/etc/hosts`, `/root/.ssh/id_rsa`, `/root/.ssh/id_rsa.pub`를 읽어 ISO에 포함한다.
-
-### `POST /cube/cloudinit/generate`
-
-모든 값을 직접 지정하는 저수준 API다. 일반 운영 화면에서는 아래의 CCVM/SCVM 전용 API를 사용하는 것이 더 안전하다.
-
-SCVM 수동 생성 예:
-
-```bash
-curl -X POST http://<ablecube-ip>:8090/api/v1/cube/cloudinit/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "scvm",
-    "iso_path": "/var/lib/libvirt/images/scvm-cloudinit.iso",
-    "hostname": "scvm1",
-    "hosts": "/etc/hosts",
-    "privkey": "/root/.ssh/id_rsa",
-    "pubkey": "/root/.ssh/id_rsa.pub",
-    "mgmt_nic": "enp0s20",
-    "mgmt_ip": "10.10.31.11",
-    "mgmt_prefix": 16,
-    "mgmt_gw": "10.10.0.1",
-    "dns": "8.8.8.8",
-    "pn_nic": "enp0s21",
-    "pn_ip": "100.100.31.11",
-    "pn_prefix": 16,
-    "cn_nic": "enp0s22",
-    "cn_ip": "100.200.31.11",
-    "cn_prefix": 16
-  }'
-```
+cloud-init API는 CCVM/SCVM 부팅에 필요한 ISO를 생성한다. 공통으로 `/etc/hosts`, `/root/.ssh/id_rsa`, `/root/.ssh/id_rsa.pub`를 읽어 ISO에 포함한다. 파일 경로, ISO 경로, 관리망 IP처럼 서버가 계산할 수 있는 값은 POST body로 받지 않고 `cluster.json`과 현재 호스트 정보를 기준으로 결정한다.
 
 ### `POST /cube/cloudinit/ccvm/generate`
 
@@ -1211,6 +1280,41 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/cube/security/patch \
   -H "Content-Type: application/json" \
   -d '{"update_json_file":true,"local":false}'
 ```
+
+## SSH Key API
+
+### `POST /cube/ssh/key`
+
+각 호스트의 `/root/.ssh/id_rsa`, `/root/.ssh/id_rsa.pub`, `/root/.ssh/authorized_keys`를 관리한다. 기본적으로 기존 파일은 덮어쓴다. 다운로드 파일은 AES-GCM으로 암호화된 단일 파일이며, 파일명은 랜덤 `.dat` 형식으로 내려간다. 최초 설치 흐름에서 2, 3번 호스트에 아직 `internal_token`이 없어도 업로드할 수 있도록 암호화는 `internal_token`에 의존하지 않는다.
+
+키 생성:
+
+```bash
+curl -X POST http://<ablecube-ip>:8090/api/v1/cube/ssh/key \
+  -H "Content-Type: application/json" \
+  -d '{"action":"generate"}'
+```
+
+Windows PC로 암호화 파일 다운로드:
+
+```bash
+curl -X POST http://<ablecube-ip>:8090/api/v1/cube/ssh/key \
+  -H "Content-Type: application/json" \
+  -d '{"action":"download"}' \
+  -OJ
+```
+
+다운로드한 암호화 파일 업로드:
+
+```bash
+curl -X POST http://<ablecube-ip>:8090/api/v1/cube/ssh/key \
+  -F action=upload \
+  -F file=@<downloaded-file>.dat
+```
+
+업로드 시 파일을 복호화해 `id_rsa`, `id_rsa.pub`를 반영하고, `/root/.ssh/authorized_keys`는 `id_rsa.pub` 내용으로 함께 갱신된다.
+
+운영자가 별도 공용 암호화 secret을 쓰고 싶으면 모든 호스트의 API 서비스 환경 변수에 같은 `ABLESTACK_SSH_KEY_BUNDLE_SECRET` 값을 설정한다. 설정하지 않으면 제품 기본값으로 암호화/복호화한다.
 
 ## Legacy/Status APIs
 
