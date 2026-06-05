@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"ablecloud.io/ablestack-api/internal/service/clusterconfig"
@@ -28,7 +29,7 @@ type ClusterHealthTargetResult = CubeModel.ClusterHealthTargetResult
 //
 //	@Summary		Cluster Health
 //	@Description	API 서버 생존 확인 및 대상 노드 상태 확인. option은 host,scvm,ccvm을 콤마로 여러 개 지정할 수 있습니다. target_hostname은 role별 표시 이름을 콤마로 지정합니다(host는 hosts[].hostname, scvm은 scvm1/scvm2, ccvm은 ccvm). option 없이 target_hostname만 지정하면 이름으로 role을 추론합니다.
-//	@Tags			CUBE - Cluster
+//	@Tags			Cube-Cluster
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Param			option			query	string	false	"host,scvm,ccvm"
@@ -335,13 +336,13 @@ func checkHealthTargets(targets []healthTarget) []ClusterHealthTargetResult {
 	return results
 }
 
-// callHealthTarget은 원격 노드의 cluster health API를 호출한다.
+// callHealthTarget은 원격 노드의 public health API를 호출한다.
 func callHealthTarget(client *http.Client, target string) error {
 	if strings.TrimSpace(target) == "" {
 		return fmt.Errorf("empty target")
 	}
 	baseURL := buildTargetURL(target)
-	url := fmt.Sprintf("%s/api/v1/cube/cluster/health", baseURL)
+	url := fmt.Sprintf("%s/api/v1/health", baseURL)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -362,7 +363,7 @@ func callHealthTarget(client *http.Client, target string) error {
 //
 //	@Summary		Show Cluster Config
 //	@Description	cluster.json의 clusterConfig만 반환합니다.
-//	@Tags			CUBE - Cluster
+//	@Tags			Cube-Cluster
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.ClusterConfigSection
@@ -386,7 +387,7 @@ func GetClusterConfig(context *gin.Context) {
 //
 //	@Summary		Apply Cluster Config (Orchestrator)
 //	@Description	입력된 hosts 수만큼 각 노드 API로 fan-out 호출합니다. insert 적용 시 각 노드에서 시간 서버 설정도 함께 적용합니다.
-//	@Tags			CUBE - Cluster
+//	@Tags			Cube-Cluster
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","iscsi_storage":""})
@@ -550,7 +551,7 @@ func ensureClusterInternalToken(req *ClusterConfigApplyRequest) error {
 //
 //	@Summary		Apply Cluster Config (Local)
 //	@Description	로컬 노드에서만 cluster_config CLI를 실행합니다. insert 적용 시 시간 서버 설정도 함께 적용합니다.
-//	@Tags			CUBE - Cluster
+//	@Tags			Cube-Cluster
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","iscsi_storage":""})
@@ -645,7 +646,8 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 
 // UpdateClusterConfig는 전역 cluster config 모델을 현재 cluster.json 기준으로 갱신한다.
 func UpdateClusterConfig() {
-	_ = updateClusterConfig(CubeModel.ClusterConfig())
+	err := updateClusterConfig(CubeModel.ClusterConfig())
+	logging.RecordJobResult("cube.UpdateClusterConfig", err, map[string]any{"path": resolveClusterJSONPath()})
 }
 
 // updateClusterConfig는 cluster.json 파일을 읽어 메모리 모델에 반영한다.

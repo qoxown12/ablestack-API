@@ -20,7 +20,7 @@ const gfsDiskStatusCommandTimeout = 10 * time.Second
 //
 //	@Summary		GFS Disk Status
 //	@Description	GFS2로 마운트된 디스크 목록을 조회합니다.
-//	@Tags			CUBE - GFS
+//	@Tags			Cube-GFS
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.GFSDiskStatusResponse

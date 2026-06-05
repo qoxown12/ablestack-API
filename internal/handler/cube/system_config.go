@@ -31,7 +31,7 @@ type SystemConfigTargetResult struct {
 //
 //	@Summary		System Config
 //	@Description	systemProfile을 반환합니다.
-//	@Tags			CUBE - System
+//	@Tags			Cube-System
 //	@Accept			json
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.ClusterSystemProfile
@@ -63,7 +63,7 @@ func GetSystemConfig(context *gin.Context) {
 //
 //	@Summary		System Config Update
 //	@Description	systemProfile을 상태 조회/수정합니다.
-//	@Tags			CUBE - System
+//	@Tags			Cube-System
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.SystemConfigRequest	true	"system config request"
@@ -485,6 +485,9 @@ func ensureSystemProfileMap(root map[string]any) (map[string]any, error) {
 	profile := map[string]any{}
 	if err := json.Unmarshal(raw, &profile); err != nil {
 		return nil, err
+	}
+	if profile == nil {
+		profile = map[string]any{}
 	}
 	root["systemProfile"] = profile
 	return profile, nil

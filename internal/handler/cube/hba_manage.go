@@ -29,7 +29,7 @@ const (
 //
 //	@Summary		HBA Manage
 //	@Description	cluster.json hosts[].ablecube 대상 API를 호출해 호스트별 HBA WWN을 조회합니다. SSH는 사용하지 않으며 요청 body 없이 호출합니다.
-//	@Tags			CUBE - HBA
+//	@Tags			Cube-HBA
 //	@Accept			json
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.HBAManageResponse

@@ -35,7 +35,7 @@ var scvmStatusCache = struct {
 //
 //	@Summary		SCVM Status
 //	@Description	SCVM의 상태를 조회합니다.
-//	@Tags			CUBE - SCVM
+//	@Tags			Cube-SCVM
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.SCVMStatusResponse

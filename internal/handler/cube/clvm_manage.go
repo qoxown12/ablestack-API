@@ -62,7 +62,7 @@ type clvmManageBlockDevice struct {
 //
 //	@Summary		CLVM Manage
 //	@Description	CLVM 디스크를 생성, 조회, 삭제합니다. 원격 노드 반영은 SSH 대신 ablecube API fan-out을 사용합니다.
-//	@Tags			CUBE - CLVM
+//	@Tags			Cube-CLVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CLVMManageRequest	true	"clvm manage request"

@@ -41,7 +41,7 @@ type glueConfigTarget struct {
 //
 //	@Summary		Update Glue Config
 //	@Description	/etc/ceph 설정을 생성하거나 pcsCluster.hostnameN에서 가져온 뒤 cluster.json hosts[].ablecube/scvmMngt 대상으로 배포합니다. 요청 body 없이 호출합니다.
-//	@Tags			CUBE - Glue Config
+//	@Tags			Cube-GlueCluster
 //	@Accept			json
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.GlueConfigUpdateResponse

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"ablecloud.io/ablestack-api/internal/service/clusterconfig"
 	"ablecloud.io/ablestack-api/internal/service/security"
@@ -226,6 +227,9 @@ func loadClusterJSONRoot() (map[string]any, error) {
 	if err := json.Unmarshal(content, &root); err != nil {
 		return nil, err
 	}
+	if root == nil {
+		root = map[string]any{}
+	}
 	return root, nil
 }
 
@@ -324,6 +328,14 @@ func scheduleSSHKnownHostsScanForHosts(hosts []string) {
 				return
 			}
 			if attempt == sshScanMaxAttempts {
+				logging.AppendJobLog("cube.SSHKnownHostsScan", "scan_incomplete", "error", "ssh scan stopped with remaining targets", map[string]any{
+					"attempts":        attempt,
+					"scanned":         len(scannedSet),
+					"scanned_hosts":   formatHosts(mapKeys(scannedSet)),
+					"remaining":       len(result.Remaining),
+					"remaining_hosts": formatHosts(result.Remaining),
+					"port":            port,
+				})
 				log.Printf("ssh-scan stopped: attempts=%d scanned=%d scanned_hosts=%s remaining=%d remaining_hosts=%s port=%d",
 					attempt,
 					len(scannedSet),

@@ -31,7 +31,7 @@ var deployStatusCache = struct {
 //
 //	@Summary		Deployment Status
 //	@Description	cluster.json, systemProfile, VM, storage, PCS 상태를 조합해 UI용 배포 단계를 반환합니다.
-//	@Tags			CUBE - Deploy
+//	@Tags			Cube-Deploy
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.DeployStatusResponse

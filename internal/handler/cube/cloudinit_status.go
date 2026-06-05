@@ -35,7 +35,7 @@ type cloudInitTarget struct {
 //
 //	@Summary		Cloud-Init Status
 //	@Description	SCVM/CCVM API를 호출해 대상 VM의 cloud-init status 또는 API 기반 ping 상태를 확인합니다. target은 ccvm, scvm 또는 직접 IP를 사용할 수 있습니다.
-//	@Tags			CUBE - CloudInit
+//	@Tags			Cube-CloudInit
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CloudInitStatusRequest	true	"cloud-init status request"

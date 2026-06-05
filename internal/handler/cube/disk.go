@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"github.com/gin-gonic/gin"
@@ -44,8 +45,8 @@ type FlatDiskItem = CubeModel.FlatDiskItem
 // GetDisk godoc
 //
 //	@Summary		Show List of Disk
-//	@Description	Cube의 Disk목록을 보여줍니다. action=detail은 multipath/single 분류 목록을 반환합니다.
-//	@Tags			CUBE - Disk
+//	@Description	Cube-Disk의 Disk목록을 보여줍니다. action=detail은 multipath/single 분류 목록을 반환합니다.
+//	@Tags			Cube-Disk
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Param			action	query	string	false	"disk action"	Enums(list,gfs,rbd,detail)
@@ -89,7 +90,8 @@ func UpdateDisk() {
 	d := CubeModel.Disk()
 	d.Lock()
 	defer d.Unlock()
-	_ = updateWithAction(d, "list")
+	err := updateWithAction(d, "list")
+	logging.RecordJobResult("cube.UpdateDisk", err, map[string]any{"action": "list"})
 }
 
 // updateWithAction은 action 정책에 맞춰 디스크 정보를 수집하고 후처리까지 수행한다.

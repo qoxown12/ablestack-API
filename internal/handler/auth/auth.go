@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"ablecloud.io/ablestack-api/internal/service/authservice"
+	"ablecloud.io/ablestack-api/internal/service/licenseservice"
 	"ablecloud.io/ablestack-api/internal/service/security"
 	"github.com/gin-gonic/gin"
 )
@@ -44,39 +46,10 @@ type InternalTokenApplyRequest struct {
 	InternalToken string `json:"internal_token"`
 }
 
-type AuthApplyRequest struct {
-	Token             string `json:"token"`
-	AccessTokenSecret string `json:"access_token_secret,omitempty" swaggerignore:"true"`
-	InternalToken     string `json:"internal_token,omitempty" swaggerignore:"true"`
-}
-
-func (r AuthApplyRequest) applyToken() string {
-	return firstNonEmpty(r.Token, r.AccessTokenSecret)
-}
-
-type AuthSyncResponse struct {
-	Code    int              `json:"code" example:"200"`
-	Val     map[string]any   `json:"val"`
-	Results []AuthSyncResult `json:"results,omitempty"`
-	Message string           `json:"message,omitempty"`
-}
-
-type AuthSyncRequest struct {
-	Option string `json:"option,omitempty" example:"all" enums:"host,scvm,ccvm,all"`
-}
-
 type InternalTokenResult struct {
 	Target  string `json:"target"`
 	Code    int    `json:"code"`
 	Message string `json:"message,omitempty"`
-}
-
-type AuthSyncResult struct {
-	Role     string `json:"role,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
-	Target   string `json:"target"`
-	Code     int    `json:"code"`
-	Message  string `json:"message,omitempty"`
 }
 
 // Login godoc
@@ -103,7 +76,11 @@ func Login(context *gin.Context) {
 
 	token, err := authservice.IssueAccessToken(strings.TrimSpace(req.ID))
 	if err != nil {
-		context.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		status := http.StatusInternalServerError
+		if isLicenseAccessError(err) {
+			status = http.StatusForbidden
+		}
+		context.JSON(status, gin.H{"code": status, "message": err.Error()})
 		return
 	}
 	context.JSON(http.StatusOK, LoginResponse{
@@ -133,6 +110,17 @@ func Me(context *gin.Context) {
 	context.JSON(http.StatusOK, MeResponse{Code: http.StatusOK, Val: claim})
 }
 
+// RotateInternalToken godoc
+//
+//	@Summary		Rotate Internal Token
+//	@Description	클러스터 내부 API 호출용 X-Cube-Internal-Token 값을 교체하고 대상 AbleCube 노드에 적용합니다.
+//	@Tags			Auth
+//	@Produce		json
+//	@Success		200	{object}	InternalTokenRotateResponse
+//	@Failure		401	{object}	map[string]any
+//	@Failure		409	{object}	map[string]any
+//	@Failure		500	{object}	map[string]any
+//	@Router			/auth/internal-token/rotate [post]
 func RotateInternalToken(context *gin.Context) {
 	if _, err := authservice.ClaimsFromRequest(context.Request); err != nil {
 		context.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": err.Error()})
@@ -186,6 +174,20 @@ func RotateInternalToken(context *gin.Context) {
 	})
 }
 
+// ApplyInternalToken godoc
+//
+//	@Summary		Apply Internal Token
+//	@Description	내부 API 서버 간 호출로 전달받은 X-Cube-Internal-Token 값을 현재 호스트에 적용합니다.
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			X-Cube-Internal-Token	header	string					true	"current internal token"
+//	@Param			body					body	InternalTokenApplyRequest	true	"internal token apply request"
+//	@Success		200						{object}	map[string]any
+//	@Failure		400						{object}	map[string]any
+//	@Failure		401						{object}	map[string]any
+//	@Failure		500						{object}	map[string]any
+//	@Router			/auth/internal-token/apply [post]
 func ApplyInternalToken(context *gin.Context) {
 	if !security.ValidateInternalToken(context.GetHeader(security.InternalTokenHeader)) {
 		context.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "invalid internal token"})
@@ -207,123 +209,6 @@ func ApplyInternalToken(context *gin.Context) {
 	context.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "val": "internal token applied"})
 }
 
-// SyncAuth godoc
-//
-//	@Summary		Sync Auth
-//	@Description	현재 호스트의 API 인증 값을 선택한 대상(host/scvm/ccvm/all) API 서버에 동기화합니다. host는 hosts[].ablecube, scvm은 hosts[].scvm, ccvm은 ccvm.ip를 사용합니다. ablestack-vm/ablestack-standalone의 all은 host,ccvm만 포함합니다.
-//	@Tags			Auth
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		AuthSyncRequest	false	"sync request"
-//	@Success		200	{object}	AuthSyncResponse
-//	@Failure		400	{object}	map[string]any
-//	@Failure		401	{object}	map[string]any
-//	@Failure		500	{object}	map[string]any
-//	@Router			/auth/sync [post]
-func SyncAuth(context *gin.Context) {
-	if _, err := authservice.ClaimsFromRequest(context.Request); err != nil {
-		context.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": err.Error()})
-		return
-	}
-	req, err := bindAuthSyncRequest(context)
-	if err != nil {
-		context.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid request"})
-		return
-	}
-	option := firstNonEmpty(context.Query("option"), req.Option, "host")
-
-	accessTokenSecret, err := authservice.ExistingSigningSecret()
-	if err != nil {
-		context.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "auth token is not initialized"})
-		return
-	}
-	internalToken, _, err := security.EnsureInternalToken()
-	if err != nil {
-		context.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
-		return
-	}
-	targets, err := security.ClusterAuthSyncTargets(option)
-	if err != nil {
-		context.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": err.Error()})
-		return
-	}
-	if len(targets) == 0 {
-		context.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "no auth sync targets"})
-		return
-	}
-
-	results := applyAccessTokenSecretToTargets(targets, internalToken, accessTokenSecret)
-	successCnt, failCnt := countAuthSyncResults(results)
-	for _, result := range results {
-		if result.Code >= 300 {
-			context.JSON(http.StatusInternalServerError, AuthSyncResponse{
-				Code:    http.StatusInternalServerError,
-				Val:     authSyncResponseVal("auth sync failed", option, accessTokenSecret, len(results), successCnt, failCnt),
-				Message: "auth sync failed",
-				Results: results,
-			})
-			return
-		}
-	}
-
-	context.JSON(http.StatusOK, AuthSyncResponse{
-		Code:    http.StatusOK,
-		Val:     authSyncResponseVal("auth synced", option, accessTokenSecret, len(results), successCnt, failCnt),
-		Results: results,
-	})
-}
-
-// ApplyAuth godoc
-//
-//	@Summary		Apply Auth
-//	@Description	내부 호출로 전달받은 API 인증 값을 현재 호스트에 적용합니다.
-//	@Tags			Auth
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		AuthApplyRequest	true	"auth apply request"
-//	@Success		200	{object}	map[string]any
-//	@Failure		401	{object}	map[string]any
-//	@Failure		409	{object}	map[string]any
-//	@Router			/auth/apply [post]
-func ApplyAuth(context *gin.Context) {
-	var req AuthApplyRequest
-	if err := context.ShouldBindJSON(&req); err != nil {
-		context.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid request"})
-		return
-	}
-	headerToken := context.GetHeader(security.InternalTokenHeader)
-	if !security.ValidateInternalToken(headerToken) {
-		if !allowAuthApplySync(headerToken, req.InternalToken) {
-			context.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "invalid internal token"})
-			return
-		}
-		if err := security.SetInternalToken(req.InternalToken); err != nil {
-			context.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
-			return
-		}
-	}
-	token := strings.TrimSpace(req.applyToken())
-	if token == "" {
-		context.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "token required"})
-		return
-	}
-	if err := authservice.SetAccessTokenSecret(token); err != nil {
-		status := http.StatusInternalServerError
-		if authservice.AccessTokenSecretManagedByEnv() {
-			status = http.StatusConflict
-		}
-		context.JSON(status, gin.H{"code": status, "message": "auth apply failed"})
-		return
-	}
-	context.JSON(http.StatusOK, gin.H{
-		"code": http.StatusOK,
-		"val": map[string]any{
-			"message": "auth applied",
-			"token":   security.MaskToken(token),
-		},
-	})
-}
-
 func Middleware() gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if context.Request.Method == http.MethodOptions || isPublicPath(context.Request.URL.Path) {
@@ -331,9 +216,14 @@ func Middleware() gin.HandlerFunc {
 			return
 		}
 
+		if err := requireActiveLicense(context.Request.URL.Path); err != nil {
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "message": err.Error()})
+			return
+		}
+
 		if hasCubeInternalHeader(context.Request.Header) {
 			if !security.ValidateInternalToken(context.GetHeader(security.InternalTokenHeader)) {
-				if allowClusterApplyLocalBootstrap(context) || allowAuthApplyRequestSync(context) {
+				if allowClusterApplyLocalBootstrap(context) {
 					context.Next()
 					return
 				}
@@ -389,31 +279,37 @@ func allowClusterApplyLocalBootstrap(context *gin.Context) bool {
 	return strings.TrimSpace(payload.Security.InternalToken) == headerToken
 }
 
-func allowAuthApplyRequestSync(context *gin.Context) bool {
-	if context.Request.Method != http.MethodPost || context.Request.URL.Path != "/api/v1/auth/apply" {
-		return false
-	}
-	headerToken := strings.TrimSpace(context.GetHeader(security.InternalTokenHeader))
-	if len(headerToken) < 16 {
-		return false
-	}
-	body, err := io.ReadAll(context.Request.Body)
-	if err != nil {
-		return false
-	}
-	context.Request.Body = io.NopCloser(bytes.NewReader(body))
-
-	var payload AuthApplyRequest
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return false
-	}
-	return strings.TrimSpace(payload.InternalToken) == headerToken
-}
-
 func isPublicPath(path string) bool {
 	return path == "/api/v1/auth/login" ||
+		path == "/api/v1/health" ||
+		path == "/health" ||
+		path == "/api/v1/cube/license" ||
 		strings.HasPrefix(path, "/api/v1/swagger") ||
 		strings.HasPrefix(path, "/swagger")
+}
+
+func requireActiveLicense(path string) error {
+	if path == "/api/v1/cube/license" ||
+		path == "/api/v1/auth/login" ||
+		path == "/api/v1/health" ||
+		path == "/health" ||
+		strings.HasPrefix(path, "/api/v1/swagger") ||
+		strings.HasPrefix(path, "/swagger") {
+		return nil
+	}
+	if _, err := licenseservice.CurrentAuthSecret(); err != nil {
+		return fmt.Errorf("active license required: %w", err)
+	}
+	return nil
+}
+
+func isLicenseAccessError(err error) bool {
+	return errors.Is(err, licenseservice.ErrNoLicense) ||
+		errors.Is(err, licenseservice.ErrExpired) ||
+		errors.Is(err, licenseservice.ErrInactive) ||
+		errors.Is(err, licenseservice.ErrInvalid) ||
+		errors.Is(err, licenseservice.ErrLicenseKey) ||
+		errors.Is(err, licenseservice.ErrNotYetValid)
 }
 
 func hasCubeInternalHeader(header http.Header) bool {
@@ -439,55 +335,6 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func allowAuthApplySync(headerToken string, bodyToken string) bool {
-	headerToken = strings.TrimSpace(headerToken)
-	bodyToken = strings.TrimSpace(bodyToken)
-	if len(headerToken) < 16 || headerToken != bodyToken {
-		return false
-	}
-	return true
-}
-
-func bindAuthSyncRequest(context *gin.Context) (AuthSyncRequest, error) {
-	var req AuthSyncRequest
-	body, err := io.ReadAll(context.Request.Body)
-	if err != nil {
-		return req, err
-	}
-	context.Request.Body = io.NopCloser(bytes.NewReader(body))
-	if len(bytes.TrimSpace(body)) == 0 {
-		return req, nil
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		return req, err
-	}
-	return req, nil
-}
-
-func authSyncResponseVal(message string, option string, token string, targetCnt int, successCnt int, failCnt int) map[string]any {
-	return map[string]any{
-		"message":     message,
-		"option":      option,
-		"token":       security.MaskToken(token),
-		"target_cnt":  targetCnt,
-		"success_cnt": successCnt,
-		"fail_cnt":    failCnt,
-	}
-}
-
-func countAuthSyncResults(results []AuthSyncResult) (int, int) {
-	successCnt := 0
-	failCnt := 0
-	for _, result := range results {
-		if result.Code >= 200 && result.Code < 300 {
-			successCnt++
-			continue
-		}
-		failCnt++
-	}
-	return successCnt, failCnt
 }
 
 func applyInternalTokenToTargets(targets []string, oldToken string, newToken string) []InternalTokenResult {
@@ -524,53 +371,6 @@ func applyInternalTokenToTarget(target string, oldToken string, newToken string)
 		return InternalTokenResult{Target: target, Code: resp.StatusCode, Message: strings.TrimSpace(string(raw))}
 	}
 	return InternalTokenResult{Target: target, Code: resp.StatusCode}
-}
-
-func applyAccessTokenSecretToTargets(targets []security.ClusterSyncTarget, internalToken string, accessTokenSecret string) []AuthSyncResult {
-	results := make([]AuthSyncResult, 0, len(targets))
-	for _, target := range targets {
-		if security.IsLocalTarget(target.Target) {
-			results = append(results, authSyncResult(target, http.StatusOK, "local target"))
-			continue
-		}
-		result := applyAccessTokenSecretToTarget(target, internalToken, accessTokenSecret)
-		results = append(results, result)
-	}
-	return results
-}
-
-func applyAccessTokenSecretToTarget(target security.ClusterSyncTarget, internalToken string, accessTokenSecret string) AuthSyncResult {
-	body, _ := json.Marshal(AuthApplyRequest{Token: accessTokenSecret, InternalToken: internalToken})
-	url := fmt.Sprintf("%s/api/v1/auth/apply", buildTargetURL(target.Target))
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return authSyncResult(target, http.StatusInternalServerError, err.Error())
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(security.InternalTokenHeader, internalToken)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return authSyncResult(target, http.StatusInternalServerError, err.Error())
-	}
-	defer resp.Body.Close()
-
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		return authSyncResult(target, resp.StatusCode, strings.TrimSpace(string(raw)))
-	}
-	return authSyncResult(target, resp.StatusCode, "")
-}
-
-func authSyncResult(target security.ClusterSyncTarget, code int, message string) AuthSyncResult {
-	return AuthSyncResult{
-		Role:     target.Role,
-		Hostname: target.Hostname,
-		Target:   target.Target,
-		Code:     code,
-		Message:  strings.TrimSpace(message),
-	}
 }
 
 func buildTargetURL(target string) string {

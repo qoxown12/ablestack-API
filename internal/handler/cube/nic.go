@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"github.com/gin-gonic/gin"
@@ -26,8 +27,8 @@ type NICIPInfo = CubeModel.NICIPInfo
 // GetNICs godoc
 //
 //	@Summary		Show List of NIC
-//	@Description	Cube의 NIC목록을 보여줍니다.
-//	@Tags			CUBE - NIC
+//	@Description	Cube-Nic의 NIC목록을 보여줍니다.
+//	@Tags			Cube-Nic
 //	@Accept		x-www-form-urlencoded
 //	@Produce		json
 //	@Param			action	query	string	false	"nic action"	Enums(list,detail)
@@ -54,7 +55,8 @@ func UpdateNICs() {
 	n := CubeModel.NIC()
 	n.Lock()
 	defer n.Unlock()
-	_ = updateNICsWithAction(n, "list")
+	err := updateNICsWithAction(n, "list")
+	logging.RecordJobResult("cube.UpdateNICs", err, map[string]any{"action": "list"})
 }
 
 // updateNICsWithAction은 action 모드에 맞게 NIC 목록을 재수집한다.

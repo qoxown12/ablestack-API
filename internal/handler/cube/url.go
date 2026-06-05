@@ -7,7 +7,6 @@ import (
 
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
-	Glue "ablecloud.io/ablestack-api/internal/model/glue"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,7 +16,7 @@ type URLResponse = CubeModel.URLResponse
 //
 //	@Summary		Get Connection URL
 //	@Description	스토리지 및 클라우드 센터 연결 주소를 반환합니다.
-//	@Tags			CUBE - URL
+//	@Tags			Cube-URL
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Param			option	query	string	false	"cloudCenter|wallCenter|storageCenter"
@@ -111,10 +110,9 @@ func buildURLForAction(action string, cfg *CubeModel.ClusterConfigSection) (stri
 		if !isHCITarget(cfg.Type) {
 			return "", fmt.Errorf("unsupported cluster type")
 		}
-		glueStatus := Glue.UpdateStatus()
-		dashboardURL := strings.TrimSpace(glueStatus.Mgrmap.Services.Dashboard)
-		if dashboardURL == "" {
-			return "", fmt.Errorf("glue dashboard 정보를 확인할 수 없습니다.")
+		dashboardURL, err := CubeModel.GlueDashboardURL()
+		if err != nil {
+			return "", err
 		}
 		return strings.TrimRight(dashboardURL, "/"), nil
 	default:

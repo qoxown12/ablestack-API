@@ -22,7 +22,7 @@ const (
 //
 //	@Summary		Create SCVM Cloud-Init ISO
 //	@Description	cluster.json과 현재 노드 정보를 기준으로 입력값 없이 SCVM cloud-init ISO를 생성합니다.
-//	@Tags			CUBE - CloudInit
+//	@Tags			Cube-SCVM
 //	@Accept			json
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.GenCloudInitResponse

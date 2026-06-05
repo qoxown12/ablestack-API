@@ -22,6 +22,12 @@ def patch_swagger_json():
     login = data.get("paths", {}).get("/auth/login", {}).get("post")
     if isinstance(login, dict):
         login["security"] = []
+    license_api = data.get("paths", {}).get("/cube/license", {}).get("post")
+    if isinstance(license_api, dict):
+        license_api["security"] = []
+    internal_token_apply = data.get("paths", {}).get("/auth/internal-token/apply", {}).get("post")
+    if isinstance(internal_token_apply, dict):
+        internal_token_apply["security"] = []
     path.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
 
 
@@ -44,6 +50,14 @@ def patch_docs_go():
     login_security = '                "security": [],\n'
     if login_marker in content and login_marker + login_security not in content:
         content = content.replace(login_marker, login_marker + login_security, 1)
+
+    license_marker = '        "/cube/license": {\n            "post": {\n'
+    if license_marker in content and license_marker + login_security not in content:
+        content = content.replace(license_marker, license_marker + login_security, 1)
+
+    internal_token_apply_marker = '        "/auth/internal-token/apply": {\n            "post": {\n'
+    if internal_token_apply_marker in content and internal_token_apply_marker + login_security not in content:
+        content = content.replace(internal_token_apply_marker, internal_token_apply_marker + login_security, 1)
 
     security_def_start = content.find('    "securityDefinitions": {')
     external_docs_start = content.find('    "externalDocs": {')
@@ -71,6 +85,14 @@ def patch_swagger_yaml():
     login_security = "      security: []\n"
     if login_marker in content and login_marker + login_security not in content:
         content = content.replace(login_marker, login_marker + login_security, 1)
+
+    license_marker = "  /cube/license:\n    post:\n"
+    if license_marker in content and license_marker + login_security not in content:
+        content = content.replace(license_marker, license_marker + login_security, 1)
+
+    internal_token_apply_marker = "  /auth/internal-token/apply:\n    post:\n"
+    if internal_token_apply_marker in content and internal_token_apply_marker + login_security not in content:
+        content = content.replace(internal_token_apply_marker, internal_token_apply_marker + login_security, 1)
 
     if "\nsecurity:\n- BearerAuth: []\n" not in content:
         marker = "securityDefinitions:\n"

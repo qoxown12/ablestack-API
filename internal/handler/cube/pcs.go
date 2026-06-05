@@ -43,7 +43,7 @@ const (
 //
 //	@Summary		PCS Control
 //	@Description	CCVM Pacemaker/PCS setup/config/create/enable/disable/move/cleanup/status/remove/destroy/stop/sync/ccvm-status 작업을 수행합니다. setup은 cluster.json의 clusterConfig.pcsCluster 노드에 CCVM 스냅샷 cron을 배포한 뒤 cloudcenter_res를 구성합니다.
-//	@Tags			CUBE - PCS
+//	@Tags			Cube-PCS
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMPCSControlRequest	true	"pcs control request"

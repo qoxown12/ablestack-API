@@ -35,7 +35,7 @@ const (
 //
 //	@Summary		CCVM XML Edit
 //	@Description	CCVM XML의 vCPU와 메모리 값을 수정합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMEditRequest	true	"ccvm edit request"

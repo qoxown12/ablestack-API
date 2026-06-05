@@ -25,7 +25,7 @@ const (
 //
 //	@Summary		Create CCVM Cloud-Init ISO
 //	@Description	cluster.json과 선택 입력된 service network 정보를 기준으로 CCVM cloud-init ISO를 생성하고 대상 ablecube host에 복사합니다.
-//	@Tags			CUBE - CloudInit
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMCloudInitCreateRequest	false	"ccvm cloud-init generate request"

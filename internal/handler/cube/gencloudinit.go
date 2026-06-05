@@ -271,7 +271,7 @@ func appendGenCloudInitCCVMFiles(userData map[string]any) error {
 	if err := appendGenCloudInitPluginFile(userData, "/root/bootstrap.sh", "root:root", "0777", "shell/host/ccvm_bootstrap.sh", "shell/ccvm_bootstrap.sh"); err != nil {
 		return err
 	}
-	return appendGenCloudInitPluginFile(userData, "/etc/cluster.json", "root:root", "0600", "properties/cluster.json")
+	return appendGenCloudInitPluginFile(userData, resolveAbleStackPropertyFile("cluster.json"), "root:root", "0600", "properties/cluster.json")
 }
 
 func appendGenCloudInitSCVMFiles(userData map[string]any, hci bool) error {

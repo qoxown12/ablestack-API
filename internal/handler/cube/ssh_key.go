@@ -69,7 +69,7 @@ var (
 //
 //	@Summary		SSH Key Management
 //	@Description	/root/.ssh/id_rsa, id_rsa.pub, authorized_keys 파일을 생성하거나 암호화된 단일 파일로 다운로드/업로드합니다.
-//	@Tags			CUBE - SSH
+//	@Tags			Cube-SSH
 //	@Accept			json
 //	@Accept			multipart/form-data
 //	@Produce		json

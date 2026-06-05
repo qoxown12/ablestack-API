@@ -27,7 +27,7 @@ const (
 //
 //	@Summary		CCVM Status
 //	@Description	CCVM의 상태를 조회합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.CCVMStatusResponse

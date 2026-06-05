@@ -14,7 +14,7 @@ type GlueClusterStatusResponse = CubeModel.GlueClusterStatusResponse
 //
 //	@Summary		Glue Cluster Status
 //	@Description	스토리지 클러스터 상태 상세 정보를 조회합니다.
-//	@Tags			CUBE - Glue Cluster
+//	@Tags			Cube-GlueCluster
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.GlueClusterStatusResponse

@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"ablecloud.io/ablestack-api/internal/service/licenseservice"
 )
 
 const (
@@ -30,7 +32,6 @@ const (
 type Config struct {
 	Linux                 LinuxConfig `json:"linux"`
 	AccessTokenTTLSeconds int64       `json:"access_token_ttl_seconds"`
-	AccessTokenSecret     string      `json:"access_token_secret"`
 }
 
 type LinuxConfig struct {
@@ -230,50 +231,15 @@ func AccessTokenTTL() time.Duration {
 }
 
 func SigningSecret() (string, error) {
-	if secret, err := ExistingSigningSecret(); err == nil {
-		return secret, nil
-	}
-	if AccessTokenSecretManagedByEnv() {
-		return "", fmt.Errorf("access token secret required")
-	}
-	cfg := LoadConfig()
-	secret, err := generateToken()
-	if err != nil {
-		return "", err
-	}
-	cfg.AccessTokenSecret = secret
-	if err := SaveConfig(cfg); err != nil {
-		return "", err
-	}
-	return secret, nil
+	return ExistingSigningSecret()
 }
 
 func ExistingSigningSecret() (string, error) {
-	if secret := strings.TrimSpace(os.Getenv("ABLESTACK_AUTH_TOKEN_SECRET")); secret != "" {
+	secret, err := licenseservice.CurrentAuthSecret()
+	if err == nil {
 		return secret, nil
 	}
-	cfg := LoadConfig()
-	if strings.TrimSpace(cfg.AccessTokenSecret) != "" {
-		return strings.TrimSpace(cfg.AccessTokenSecret), nil
-	}
-	return "", fmt.Errorf("access token secret required")
-}
-
-func SetAccessTokenSecret(secret string) error {
-	if AccessTokenSecretManagedByEnv() {
-		return fmt.Errorf("access token secret is managed by environment")
-	}
-	secret = strings.TrimSpace(secret)
-	if secret == "" {
-		return fmt.Errorf("access token secret required")
-	}
-	cfg := LoadConfig()
-	cfg.AccessTokenSecret = secret
-	return SaveConfig(cfg)
-}
-
-func AccessTokenSecretManagedByEnv() bool {
-	return strings.TrimSpace(os.Getenv("ABLESTACK_AUTH_TOKEN_SECRET")) != ""
+	return "", fmt.Errorf("active license required: %w", err)
 }
 
 func VerifyToken(token string, secret string) (TokenClaim, error) {

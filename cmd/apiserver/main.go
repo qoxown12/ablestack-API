@@ -3,23 +3,19 @@ package main
 import (
 	"errors"
 	"fmt"
-	"net/http"
-
-	C "ablecloud.io/ablestack-api/internal/service/controller"
-	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-
-	CubeHandler "ablecloud.io/ablestack-api/internal/handler/cube"
 	"log"
+	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"ablecloud.io/ablestack-api/docs"
 	Auth "ablecloud.io/ablestack-api/internal/handler/auth"
-	Dashboard "ablecloud.io/ablestack-api/internal/handler/dashboard"
-	Glue "ablecloud.io/ablestack-api/internal/handler/glue"
-	Mold "ablecloud.io/ablestack-api/internal/handler/mold"
-	PCS "ablecloud.io/ablestack-api/internal/handler/pcs"
+	CubeHandler "ablecloud.io/ablestack-api/internal/handler/cube"
+	GlueHandler "ablecloud.io/ablestack-api/internal/handler/glue"
+	SwaggerHandler "ablecloud.io/ablestack-api/internal/handler/swagger"
+	"ablecloud.io/ablestack-api/internal/infra/logging"
+	C "ablecloud.io/ablestack-api/internal/service/controller"
 )
 
 //	@title			Cube API
@@ -55,11 +51,6 @@ func main() {
 	time.Local = location
 
 	c := C.Init()
-	c.LoadConfig()
-	//c.StatusRegister(Mold.MonitorStatus)
-	c.StatusRegister(Glue.Monitor)
-	//c.StatusRegister(Dashboard.Monitor)
-	c.StatusRegister(PCS.Monitor)
 	c.StatusRegister(CubeHandler.UpdateHosts)
 	c.StatusRegister(CubeHandler.UpdateClusterConfig)
 	// Background daily ssh-keyscan based on cluster.json + systemProfile
@@ -68,7 +59,6 @@ func main() {
 	c.StatusRegister(CubeHandler.AutoCCVMFileBackupSchedule)
 	c.StatusRegister(CubeHandler.UpdateNICs)
 	c.StatusRegister(CubeHandler.UpdateDisk)
-	c.StatusRegister(C.SaveConfig)
 
 	go c.Start()
 	APIPort := "8090"
@@ -77,6 +67,7 @@ func main() {
 
 	//gin.SetMode(gin.DebugMode)
 	gin.SetMode(gin.ReleaseMode)
+	logging.StartRotationWorker()
 
 	r := gin.New()
 	r.ForwardedByClientIP = true
@@ -85,9 +76,9 @@ func main() {
 		c.AddError(err)
 	}
 
-	r.Use(gin.Logger())
-	// Recovery 미들웨어는 panic이 발생하면 500 에러를 씁니다.
-	r.Use(gin.Recovery())
+	r.Use(logging.GinRequestLogger())
+	// Recovery 미들웨어는 panic이 발생하면 500 에러를 쓰고 detail log에 stack을 남깁니다.
+	r.Use(logging.GinRecovery())
 	// CORS (Swagger/웹 클라이언트 대응)
 	r.Use(func(ctx *gin.Context) {
 		ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -103,24 +94,21 @@ func main() {
 
 	v1 := r.Group("/api/v1")
 	{
+		v1.GET("/health", CubeHandler.Health)
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/login", Auth.Login)
 			auth.GET("/me", Auth.Me)
 			auth.POST("/internal-token/rotate", Auth.RotateInternalToken)
 			auth.POST("/internal-token/apply", Auth.ApplyInternalToken)
-			auth.POST("/sync", Auth.SyncAuth)
-			auth.POST("/apply", Auth.ApplyAuth)
 		}
-		v1.GET("/neighbor", c.GetNeighbor)
-		v1.GET("/neighbor/info", c.GetNeighborInfo)
-		v1.POST("/neighbor", c.PutNeighbor)
-		v1.PUT("/neighbor", c.PutNeighbor)
-		v1.DELETE("/neighbor", c.DeleteNeighbor)
 		cube := v1.Group("/cube")
 		{
 			cube.GET("/cluster/health", CubeHandler.ClusterHealth)
 			cube.GET("/deploy/status", CubeHandler.GetDeployStatus)
+			cube.POST("/deploy/run", CubeHandler.StartDeployRun)
+			cube.GET("/deploy/jobs", CubeHandler.ListDeployRunJobs)
+			cube.GET("/deploy/jobs/:job_id", CubeHandler.GetDeployRunJob)
 			cube.GET("/hosts", CubeHandler.GetHosts)
 			cube.GET("/test", CubeHandler.GetHosts)
 			cube.GET("/cluster/config", CubeHandler.GetClusterConfig)
@@ -161,42 +149,23 @@ func main() {
 			cube.POST("/security/patch", CubeHandler.SecurityPatch)
 			cube.POST("/ssh/key", CubeHandler.SSHKey)
 			cube.POST("/license", CubeHandler.LicenseControl)
+			cube.POST("/license/apply", CubeHandler.ApplyLicenseToCluster)
 			cube.POST("/db/dump", CubeHandler.DBDump)
 			cube.GET("/nics", CubeHandler.GetNICs)
 			cube.GET("/disk", CubeHandler.GetDisk)
 		}
-		glue := v1.Group("/glue")
-		{
-			glue.GET("/", Glue.GetGlueStatus)
-			glue.GET("/auth", Glue.GetGlueAuth)
-			glue.GET("/auth/:username", Glue.GetGlueAuth)
-			glue.GET("/auths", Glue.GetGlueAuths)
-		}
-		mold := v1.Group("/mold")
-		{
-			mold.GET("", Mold.GetStatus)
-			mold.GET("/ccvm", Mold.GetCCVMInfo)
-		}
-		pcs := v1.Group("/pcs")
-		{
-			pcs.GET("", PCS.GetStatus)
-			pcs.GET("/resources", PCS.GetResource)
-		}
-		dashboard := v1.Group("/dashboard")
-		{
-			dashboard.GET("", Dashboard.GetStatus)
-
-		}
-		//v1.Any("/version", Cube.Version)
+		GlueHandler.RegisterRoutesIfSCVM(v1.Group("/glue"))
+		v1.GET("/version", CubeHandler.Version)
 		v1.GET("/err", c.Error)
 		v1.DELETE("/err", c.DeleteError)
-		v1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		v1.GET("/swagger/*any", SwaggerHandler.Handler())
 	}
 	// Convenience: allow /swagger and /swagger/index.html without /api/v1 prefix.
 	r.GET("/swagger", func(ctx *gin.Context) {
 		ctx.Redirect(302, "/swagger/index.html")
 	})
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger/*any", SwaggerHandler.Handler())
+	r.GET("/health", CubeHandler.Health)
 
 	err = r.Run(":" + APIPort)
 	if err != nil {

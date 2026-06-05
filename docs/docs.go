@@ -29,9 +29,10 @@ const docTemplate = `{
         }
     ],
     "paths": {
-        "/auth/apply": {
+        "/auth/internal-token/apply": {
             "post": {
-                "description": "내부 호출로 전달받은 API 인증 값을 현재 호스트에 적용합니다.",
+                "security": [],
+                "description": "내부 API 서버 간 호출로 전달받은 X-Cube-Internal-Token 값을 현재 호스트에 적용합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -41,21 +42,35 @@ const docTemplate = `{
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Apply Auth",
+                "summary": "Apply Internal Token",
                 "parameters": [
                     {
-                        "description": "auth apply request",
+                        "type": "string",
+                        "description": "current internal token",
+                        "name": "X-Cube-Internal-Token",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "internal token apply request",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler_auth.AuthApplyRequest"
+                            "$ref": "#/definitions/internal_handler_auth.InternalTokenApplyRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -68,8 +83,49 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/internal-token/rotate": {
+            "post": {
+                "description": "클러스터 내부 API 호출용 X-Cube-Internal-Token 값을 교체하고 대상 AbleCube 노드에 적용합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Rotate Internal Token",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_auth.InternalTokenRotateResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -147,60 +203,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/sync": {
-            "post": {
-                "description": "현재 호스트의 API 인증 값을 선택한 대상(host/scvm/ccvm/all) API 서버에 동기화합니다. host는 hosts[].ablecube, scvm은 hosts[].scvm, ccvm은 ccvm.ip를 사용합니다. ablestack-vm/ablestack-standalone의 all은 host,ccvm만 포함합니다.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Sync Auth",
-                "parameters": [
-                    {
-                        "description": "sync request",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler_auth.AuthSyncRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler_auth.AuthSyncResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/cube/auto-shutdown": {
             "post": {
                 "description": "전체 호스트 정상 종료 절차를 수행합니다. 사용 가능한 action: check_mount, stop_scvms, shutdown_hosts. SSH 대신 ablecube API fan-out을 사용합니다.",
@@ -211,7 +213,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Auto Shutdown"
+                    "Cube-AutoShutdown"
                 ],
                 "summary": "Auto Shutdown",
                 "parameters": [
@@ -257,7 +259,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM File Backup",
                 "parameters": [
@@ -303,7 +305,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM XML Edit",
                 "parameters": [
@@ -349,7 +351,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM Lifecycle",
                 "parameters": [
@@ -395,7 +397,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM File Restore",
                 "parameters": [
@@ -441,7 +443,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM Secondary Resize",
                 "parameters": [
@@ -487,7 +489,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM Service Control",
                 "parameters": [
@@ -533,7 +535,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM Snapshot",
                 "parameters": [
@@ -579,7 +581,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "CCVM Status",
                 "responses": {
@@ -614,7 +616,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CCVM"
+                    "Cube-CCVM"
                 ],
                 "summary": "Create CCVM XML",
                 "parameters": [
@@ -660,7 +662,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CloudInit"
+                    "Cube-CCVM"
                 ],
                 "summary": "Create CCVM Cloud-Init ISO",
                 "parameters": [
@@ -705,7 +707,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CloudInit"
+                    "Cube-SCVM"
                 ],
                 "summary": "Create SCVM Cloud-Init ISO",
                 "responses": {
@@ -740,7 +742,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CloudInit"
+                    "Cube-CloudInit"
                 ],
                 "summary": "Cloud-Init Status",
                 "parameters": [
@@ -786,7 +788,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Cluster"
+                    "Cube-Cluster"
                 ],
                 "summary": "Apply Cluster Config (Orchestrator)",
                 "parameters": [
@@ -838,7 +840,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Cluster"
+                    "Cube-Cluster"
                 ],
                 "summary": "Apply Cluster Config (Local)",
                 "parameters": [
@@ -890,7 +892,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Cluster"
+                    "Cube-Cluster"
                 ],
                 "summary": "Show Cluster Config",
                 "responses": {
@@ -931,7 +933,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Cluster"
+                    "Cube-Cluster"
                 ],
                 "summary": "Cluster Health",
                 "parameters": [
@@ -968,7 +970,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - CLVM"
+                    "Cube-CLVM"
                 ],
                 "summary": "CLVM Manage",
                 "parameters": [
@@ -1014,7 +1016,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - DB"
+                    "Cube-DB"
                 ],
                 "summary": "CCVM DB Dump",
                 "parameters": [
@@ -1050,6 +1052,101 @@ const docTemplate = `{
                 }
             }
         },
+        "/cube/deploy/jobs": {
+            "get": {
+                "description": "최근 올인원 배포 job 목록을 반환합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cube-Deploy"
+                ],
+                "summary": "All-in-one Deploy Jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunJobListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cube/deploy/jobs/{job_id}": {
+            "get": {
+                "description": "올인원 배포 job 상태와 step별 결과를 반환합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cube-Deploy"
+                ],
+                "summary": "All-in-one Deploy Job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "job id",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunJobResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP404NotFound"
+                        }
+                    }
+                }
+            }
+        },
+        "/cube/deploy/run": {
+            "post": {
+                "description": "기존 개별 API를 보존한 상태에서 라이선스/클러스터/SCVM/스토리지/CCVM 준비 단계를 job으로 순차 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cube-Deploy"
+                ],
+                "summary": "All-in-one Deploy Run",
+                "parameters": [
+                    {
+                        "description": "deploy run request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunStartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP400BadRequest"
+                        }
+                    }
+                }
+            }
+        },
         "/cube/deploy/status": {
             "get": {
                 "description": "cluster.json, systemProfile, VM, storage, PCS 상태를 조합해 UI용 배포 단계를 반환합니다.",
@@ -1060,7 +1157,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Deploy"
+                    "Cube-Deploy"
                 ],
                 "summary": "Deployment Status",
                 "responses": {
@@ -1081,7 +1178,7 @@ const docTemplate = `{
         },
         "/cube/disk": {
             "get": {
-                "description": "Cube의 Disk목록을 보여줍니다. action=detail은 multipath/single 분류 목록을 반환합니다.",
+                "description": "Cube-Disk의 Disk목록을 보여줍니다. action=detail은 multipath/single 분류 목록을 반환합니다.",
                 "consumes": [
                     "application/x-www-form-urlencoded"
                 ],
@@ -1089,7 +1186,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Disk"
+                    "Cube-Disk"
                 ],
                 "summary": "Show List of Disk",
                 "parameters": [
@@ -1155,7 +1252,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - GFS"
+                    "Cube-GFS"
                 ],
                 "summary": "GFS Disk Status",
                 "responses": {
@@ -1184,7 +1281,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - GFS"
+                    "Cube-GFS"
                 ],
                 "summary": "GFS Manage",
                 "parameters": [
@@ -1230,7 +1327,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - GFS"
+                    "Cube-GFS"
                 ],
                 "summary": "GFS Resource Status",
                 "responses": {
@@ -1259,7 +1356,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Glue Config"
+                    "Cube-GlueCluster"
                 ],
                 "summary": "Update Glue Config",
                 "responses": {
@@ -1294,7 +1391,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Glue Cluster"
+                    "Cube-GlueCluster"
                 ],
                 "summary": "Glue Cluster Status",
                 "responses": {
@@ -1323,7 +1420,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Glue Cluster"
+                    "Cube-GlueCluster"
                 ],
                 "summary": "Glue Cluster Update",
                 "parameters": [
@@ -1369,7 +1466,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - HBA"
+                    "Cube-HBA"
                 ],
                 "summary": "HBA Manage",
                 "responses": {
@@ -1396,7 +1493,7 @@ const docTemplate = `{
         },
         "/cube/hosts": {
             "get": {
-                "description": "Cube의 Hosts 파일의 목록을 보여줍니다.",
+                "description": "Cube-Hosts의 Hosts 파일의 목록을 보여줍니다.",
                 "consumes": [
                     "application/x-www-form-urlencoded"
                 ],
@@ -1404,7 +1501,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Host"
+                    "Cube-Hosts"
                 ],
                 "summary": "Show List of Hosts",
                 "responses": {
@@ -1437,26 +1534,31 @@ const docTemplate = `{
         },
         "/cube/license": {
             "post": {
-                "description": "라이센스 등록 및 상태 확인을 수행합니다.",
+                "security": [],
+                "description": "라이센스 등록 및 상태 확인을 수행합니다. 등록은 JSON license_content 또는 multipart license_file/file 업로드를 지원합니다.",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - License"
+                    "Cube-License"
                 ],
                 "summary": "License Control",
                 "parameters": [
                     {
-                        "description": "license request",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseRequest"
-                        }
+                        "type": "string",
+                        "description": "status/register",
+                        "name": "action",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "license file",
+                        "name": "license_file",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -1464,6 +1566,51 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP400BadRequest"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/HTTP500InternalServerError"
+                        }
+                    }
+                }
+            }
+        },
+        "/cube/license/apply": {
+            "post": {
+                "description": "마스터 노드의 라이선스 또는 요청으로 전달된 라이선스를 cluster.json 대상에 role 기반 fan-out 등록합니다. roles가 비어 있으면 기존 호환성을 위해 hosts[].ablecube만 대상으로 합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cube-License"
+                ],
+                "summary": "License Apply",
+                "parameters": [
+                    {
+                        "description": "license apply request",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyResponse"
                         }
                     },
                     "400": {
@@ -1491,7 +1638,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Local"
+                    "Cube-Local"
                 ],
                 "summary": "Local Disk Manage",
                 "parameters": [
@@ -1529,7 +1676,7 @@ const docTemplate = `{
         },
         "/cube/nics": {
             "get": {
-                "description": "Cube의 NIC목록을 보여줍니다.",
+                "description": "Cube-Nic의 NIC목록을 보여줍니다.",
                 "consumes": [
                     "application/x-www-form-urlencoded"
                 ],
@@ -1537,7 +1684,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - NIC"
+                    "Cube-Nic"
                 ],
                 "summary": "Show List of NIC",
                 "parameters": [
@@ -1590,7 +1737,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - PCS"
+                    "Cube-PCS"
                 ],
                 "summary": "PCS Control",
                 "parameters": [
@@ -1636,7 +1783,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - GFS"
+                    "Cube-RBD"
                 ],
                 "summary": "RBD Manage",
                 "parameters": [
@@ -1682,7 +1829,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - SCVM"
+                    "Cube-SCVM"
                 ],
                 "summary": "SCVM Lifecycle",
                 "parameters": [
@@ -1728,7 +1875,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - SCVM"
+                    "Cube-SCVM"
                 ],
                 "summary": "SCVM Status",
                 "responses": {
@@ -1757,7 +1904,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - SCVM"
+                    "Cube-SCVM"
                 ],
                 "summary": "Create SCVM XML",
                 "parameters": [
@@ -1803,7 +1950,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Security"
+                    "Cube-Security"
                 ],
                 "summary": "Security Patch",
                 "parameters": [
@@ -1851,7 +1998,7 @@ const docTemplate = `{
                     "application/octet-stream"
                 ],
                 "tags": [
-                    "CUBE - SSH"
+                    "Cube-SSH"
                 ],
                 "summary": "SSH Key Management",
                 "parameters": [
@@ -1902,7 +2049,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - System"
+                    "Cube-System"
                 ],
                 "summary": "System Config",
                 "responses": {
@@ -1929,7 +2076,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - System"
+                    "Cube-System"
                 ],
                 "summary": "System Config Update",
                 "parameters": [
@@ -1975,7 +2122,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - URL"
+                    "Cube-URL"
                 ],
                 "summary": "Get Connection URL",
                 "parameters": [
@@ -2018,7 +2165,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Version"
+                    "Cube-Version"
                 ],
                 "summary": "ABLESTACK Version Update",
                 "parameters": [
@@ -2054,48 +2201,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard": {
-            "get": {
-                "description": "GLUE의 상태값을 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "API",
-                    "Dashboard"
-                ],
-                "summary": "Show StorageCenterClusterStatus of GLUE",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/TypeStorageCenterCluster"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
-                        }
-                    }
-                }
-            }
-        },
         "/err": {
             "get": {
                 "description": "Error.",
@@ -2106,8 +2211,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "CUBE"
+                    "Cube-Error"
                 ],
                 "summary": "Error",
                 "responses": {
@@ -2140,243 +2244,128 @@ const docTemplate = `{
         },
         "/glue": {
             "get": {
-                "description": "GLUE의 상태값을 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
+                "description": "SCVM 전용 Glue-Core API 등록 상태와 현재 노드의 SCVM 판정 결과를 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "Glue",
-                    "GLUE"
+                    "Glue-Core"
                 ],
-                "summary": "Show Status of GLUE",
+                "summary": "Glue-Core API 상태",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/TypeGlueStatus"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             }
         },
-        "/glue/auth": {
+        "/glue/gluefs": {
             "get": {
-                "description": "GLUE의 인증키를 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
+                "description": "SCVM 로컬에서 ceph fs status, ceph fs ls 명령 기반으로 GlueFS 상태와 목록을 조회합니다.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "Glue",
-                    "GLUE"
+                    "Glue-GlueFS"
                 ],
-                "summary": "Show Auth of GLUE",
+                "summary": "GlueFS 상태",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/TypeAuth"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
-                        }
-                    }
-                }
-            }
-        },
-        "/glue/auths": {
-            "get": {
-                "description": "GLUE의 인증키 목록을 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "API",
-                    "Glue",
-                    "GLUE"
-                ],
-                "summary": "Show Auths of GLUE",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/TypeAuth"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
-                        }
-                    }
-                }
-            }
-        },
-        "/mold": {
-            "get": {
-                "description": "MOLD의 상태값을 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "API",
-                    "Mold",
-                    "MOLD"
-                ],
-                "summary": "Show Status of MOLD",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/TypeMoldStatus"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
-                        }
-                    }
-                }
-            }
-        },
-        "/neighbor": {
-            "get": {
-                "description": "GetNeighbor.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "API",
-                    "CUBE"
-                ],
-                "summary": "GetNeighbor",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_service_controller.TypeNeighbors"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             },
             "put": {
-                "description": "PutNeighbor.",
+                "description": "SCVM 로컬에서 ceph fs rename과 MDS placement 적용 명령으로 GlueFS를 수정합니다.",
                 "consumes": [
-                    "application/x-www-form-urlencoded"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "CUBE"
+                    "Glue-GlueFS"
                 ],
-                "summary": "PutNeighbor",
+                "summary": "GlueFS 배치 수정",
+                "parameters": [
+                    {
+                        "description": "gluefs placement request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.GlueFSPlacementRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/gluefs/info/{fs_name}": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph fs get 명령 기반으로 GlueFS 상세 정보를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-GlueFS"
+                ],
+                "summary": "GlueFS 상세",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Neighbor IP",
-                        "name": "ip",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Neighbor Hostname",
-                        "name": "hostname",
-                        "in": "formData",
+                        "description": "filesystem name",
+                        "name": "fs_name",
+                        "in": "path",
                         "required": true
                     }
                 ],
@@ -2384,111 +2373,486 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_service_controller.TypeNeighbors"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/gluefs/subvolume/group": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph fs subvolumegroup ls/info/getpath/snapshot ls 명령 기반으로 subvolume group을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-GlueFS"
+                ],
+                "summary": "Subvolume Group 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "filesystem volume name",
+                        "name": "vol_name",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "SCVM 로컬에서 ceph fs subvolumegroup resize --no_shrink 명령으로 quota를 확장합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-GlueFS"
+                ],
+                "summary": "Subvolume Group 크기 수정",
+                "parameters": [
+                    {
+                        "description": "subvolume group resize request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.GlueFSSubvolumeGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             },
             "post": {
-                "description": "PutNeighbor.",
+                "description": "SCVM 로컬에서 ceph fs subvolumegroup create 명령으로 subvolume group을 생성합니다.",
                 "consumes": [
-                    "application/x-www-form-urlencoded"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "CUBE"
+                    "Glue-GlueFS"
                 ],
-                "summary": "PutNeighbor",
+                "summary": "Subvolume Group 생성",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Neighbor IP",
-                        "name": "ip",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Neighbor Hostname",
-                        "name": "hostname",
-                        "in": "formData",
-                        "required": true
+                        "description": "subvolume group create request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.GlueFSSubvolumeGroupRequest"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_service_controller.TypeNeighbors"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             },
             "delete": {
-                "description": "DeleteNeighbor.",
+                "description": "SCVM 로컬에서 ceph fs subvolumegroup rm 명령으로 subvolume group을 삭제합니다.",
                 "consumes": [
-                    "application/x-www-form-urlencoded"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "CUBE"
+                    "Glue-GlueFS"
                 ],
-                "summary": "DeleteNeighbor",
+                "summary": "Subvolume Group 삭제",
+                "parameters": [
+                    {
+                        "description": "subvolume group delete request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.GlueFSSubvolumeGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/gluefs/{fs_name}": {
+            "post": {
+                "description": "SCVM 로컬에서 ceph fs volume create와 pool rename/set 명령으로 GlueFS를 생성합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-GlueFS"
+                ],
+                "summary": "GlueFS 생성",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Neighbor IP",
-                        "name": "ip",
-                        "in": "formData",
+                        "description": "filesystem name",
+                        "name": "fs_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "gluefs create request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.GlueFSPlacementRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "하위 subvolume group이 없을 때 SCVM 로컬 ceph fs volume rm 명령으로 GlueFS를 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-GlueFS"
+                ],
+                "summary": "GlueFS 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "filesystem name",
+                        "name": "fs_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/hosts": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph orch host ls 명령 기반으로 Glue-Core host 목록을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Core"
+                ],
+                "summary": "Host 목록",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/image": {
+            "get": {
+                "description": "SCVM 로컬에서 rbd ls/info 명령 기반으로 image 목록 또는 상세 정보를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Image"
+                ],
+                "summary": "RBD Image 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pool name",
+                        "name": "pool_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "image name",
+                        "name": "image_name",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 rbd create 명령 기반으로 image를 생성합니다. size는 GiB 단위입니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Image"
+                ],
+                "summary": "RBD Image 생성",
+                "parameters": [
+                    {
+                        "description": "image create request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ImageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬에서 rbd rm 명령 기반으로 image를 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Image"
+                ],
+                "summary": "RBD Image 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pool name",
+                        "name": "pool_name",
+                        "in": "query",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "Neighbor Hostname",
-                        "name": "hostname",
-                        "in": "formData",
+                        "description": "image name",
+                        "name": "image_name",
+                        "in": "query",
                         "required": true
                     }
                 ],
@@ -2496,151 +2860,3263 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_service_controller.TypeNeighbor"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             }
         },
-        "/neighbor/info": {
-            "get": {
-                "description": "GetNeighbor.",
+        "/glue/iscsi": {
+            "put": {
+                "description": "SCVM 로컬에서 iSCSI gateway service spec을 재적용한 뒤 ceph orch redeploy를 실행합니다.",
                 "consumes": [
-                    "application/x-www-form-urlencoded"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "CUBE"
+                    "Glue-ISCSI"
                 ],
-                "summary": "GetNeighbor",
+                "summary": "iSCSI Service 수정",
+                "parameters": [
+                    {
+                        "description": "iSCSI service request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSIServiceRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_service_controller.TypeNeighborInfos"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 iSCSI gateway service spec을 생성하고 ceph orch apply로 적용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-ISCSI"
+                ],
+                "summary": "iSCSI Service 생성",
+                "parameters": [
+                    {
+                        "description": "iSCSI service request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSIServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             }
         },
-        "/pcs": {
+        "/glue/iscsi/discovery": {
             "get": {
-                "description": "PCS 상태값을 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
+                "description": "Ceph dashboard API로 iSCSI discovery auth 정보를 조회합니다.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "PCS"
+                    "Glue-ISCSI"
                 ],
-                "summary": "Show Status of PCS",
+                "summary": "iSCSI Discovery 조회",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/TypePCSStatus"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Ceph dashboard API로 iSCSI discovery auth 정보를 수정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-ISCSI"
+                ],
+                "summary": "iSCSI Discovery 수정",
+                "parameters": [
+                    {
+                        "description": "iSCSI discovery request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSIAuthRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     }
                 }
             }
         },
-        "/pcs/resources": {
+        "/glue/iscsi/target": {
             "get": {
-                "description": "PCS 상태값을 보여줍니다.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
+                "description": "Ceph dashboard API로 iSCSI target 목록 또는 상세를 조회합니다.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "API",
-                    "PCS"
+                    "Glue-ISCSI"
                 ],
-                "summary": "Show Status of PCS",
+                "summary": "iSCSI Target 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "iSCSI target IQN",
+                        "name": "iqn_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_pcs.TypePCSResources"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/HTTP400BadRequest"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/HTTP404NotFound"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/HTTP500InternalServerError"
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Ceph dashboard API로 iSCSI target을 수정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-ISCSI"
+                ],
+                "summary": "iSCSI Target 수정",
+                "parameters": [
+                    {
+                        "description": "iSCSI target update request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Ceph dashboard API로 iSCSI target을 생성합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-ISCSI"
+                ],
+                "summary": "iSCSI Target 생성",
+                "parameters": [
+                    {
+                        "description": "iSCSI target request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Ceph dashboard API로 iSCSI target을 삭제합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-ISCSI"
+                ],
+                "summary": "iSCSI Target 삭제",
+                "parameters": [
+                    {
+                        "description": "iSCSI target delete request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/iscsi/target/purge": {
+            "delete": {
+                "description": "SCVM 로컬 iSCSI gateway container 안에서 gwcli delete를 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-ISCSI"
+                ],
+                "summary": "iSCSI Target 강제 삭제",
+                "parameters": [
+                    {
+                        "description": "iSCSI target purge request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/mirror": {
+            "get": {
+                "description": "SCVM 로컬에서 rbd mirror pool status 명령 기반으로 mirror 상태를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror 상태",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "SCVM 로컬에서 rbd/MOLD-DR metadata image의 mirror interval을 수정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Cluster 수정",
+                "parameters": [
+                    {
+                        "description": "mirror cluster update request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.MirrorClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 RBD mirror pool을 활성화하고 bootstrap token을 생성합니다. remote_token이 있으면 local pool에 peer로 import합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Cluster 설정",
+                "parameters": [
+                    {
+                        "description": "mirror cluster setup request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.MirrorClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬에서 mirror peer, pool mirroring, rbd-mirror service, metadata image를 정리합니다. remote cluster는 해당 SCVM에서 같은 API를 호출해야 합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Cluster 삭제",
+                "parameters": [
+                    {
+                        "description": "mirror cluster delete request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.MirrorClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/mirror/garbage": {
+            "delete": {
+                "description": "SCVM 로컬에서 mirror 잔여 peer/auth/service/metadata image를 정리합니다. mirror_pool query가 없으면 rbd pool을 대상으로 사용합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Garbage 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "mirror pool",
+                        "name": "mirror_pool",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/mirror/image/{mirrorPool}": {
+            "get": {
+                "description": "SCVM 로컬에서 rbd mirror pool status --verbose 명령 기반으로 mirrored image 목록을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Image 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "mirror pool",
+                        "name": "mirrorPool",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/mirror/image/{mirrorPool}/{imageName}": {
+            "get": {
+                "description": "SCVM 로컬에서 rbd mirror image status 명령 기반으로 mirrored image 상세 상태를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Image 상세",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "mirror pool",
+                        "name": "mirrorPool",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "image name",
+                        "name": "imageName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/mirror/{mirrorPool}": {
+            "post": {
+                "description": "SCVM 로컬에서 path pool의 RBD mirroring을 활성화하고 bootstrap token을 반환합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Pool 활성화",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "mirror pool",
+                        "name": "mirrorPool",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "mirror pool enable request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.MirrorPoolRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬에서 path pool의 mirror peer와 image mirroring을 정리하고 pool mirroring을 비활성화합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Mirror"
+                ],
+                "summary": "Mirror Pool 비활성화",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "mirror pool",
+                        "name": "mirrorPool",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph nfs cluster info 명령 기반으로 NFS cluster 정보를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Cluster 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs/export": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph nfs export ls --detailed 명령 기반으로 NFS export를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Export 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs/export/{cluster_id}": {
+            "put": {
+                "description": "SCVM 로컬에서 NFS export JSON spec을 재적용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Export 수정",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "NFS export update request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NFSExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 NFS export JSON spec을 생성하고 ceph nfs export apply로 적용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Export 생성",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "NFS export create request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NFSExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs/export/{cluster_id}/{export_id}": {
+            "delete": {
+                "description": "export_id에 해당하는 pseudo를 조회한 뒤 ceph nfs export rm 명령으로 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Export 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "NFS export ID",
+                        "name": "export_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs/ingress": {
+            "put": {
+                "description": "SCVM 로컬에서 HAProxy/keepalived ingress spec을 재적용한 뒤 ceph orch redeploy를 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Ingress 수정",
+                "parameters": [
+                    {
+                        "description": "NFS ingress update request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NFSIngressRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 HAProxy/keepalived ingress spec을 생성하고 ceph orch apply로 적용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Ingress 생성",
+                "parameters": [
+                    {
+                        "description": "NFS ingress create request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NFSIngressRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs/{cluster_id}": {
+            "delete": {
+                "description": "SCVM 로컬에서 ceph nfs cluster rm 명령으로 NFS cluster를 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Cluster 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nfs/{cluster_id}/{port}": {
+            "put": {
+                "description": "SCVM 로컬에서 NFS service spec을 재적용한 뒤 ceph orch redeploy를 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Cluster 수정",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "NFS port",
+                        "name": "port",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "NFS cluster update request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NFSClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 NFS service spec을 생성하고 ceph orch apply로 적용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NFS"
+                ],
+                "summary": "NFS Cluster 생성",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NFS cluster ID",
+                        "name": "cluster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "NFS port",
+                        "name": "port",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "NFS cluster create request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NFSClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nvmeof": {
+            "post": {
+                "description": "SCVM 로컬에서 pool을 초기화하고 ceph orch apply로 NVMe-oF service를 생성합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Service 생성",
+                "parameters": [
+                    {
+                        "description": "NVMe-oF service request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NVMeOfServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nvmeof/image/download": {
+            "post": {
+                "description": "SCVM 로컬 podman에 NVMe-oF CLI image를 pull합니다. image를 생략하면 기본 local registry image를 사용합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Image 다운로드",
+                "parameters": [
+                    {
+                        "description": "NVMe-oF image request",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NVMeOfImageDownloadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nvmeof/namespace": {
+            "get": {
+                "description": "SCVM 로컬 podman의 NVMe-oF CLI로 namespace 목록을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Namespace 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NVMe-oF subsystem NQN",
+                        "name": "subsystem_nqn_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "필요 시 RBD image를 생성한 뒤 subsystem에 namespace를 추가합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Namespace 생성",
+                "parameters": [
+                    {
+                        "description": "NVMe-oF namespace request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NVMeOfNamespaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "namespace를 삭제하고, image_del_check=true이면 연결된 RBD image도 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Namespace 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NVMe-oF subsystem NQN",
+                        "name": "subsystem_nqn_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "NVMe-oF namespace UUID",
+                        "name": "namespace_uuid",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "true",
+                            "false"
+                        ],
+                        "type": "string",
+                        "description": "delete backing RBD image",
+                        "name": "image_del_check",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "pool name",
+                        "name": "pool_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "image name",
+                        "name": "image_name",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nvmeof/subsystem": {
+            "get": {
+                "description": "SCVM 로컬 podman의 NVMe-oF CLI로 subsystem 목록 또는 상세를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Subsystem 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NVMe-oF subsystem NQN",
+                        "name": "subsystem_nqn_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "subsystem을 생성하고 listener와 wildcard host allow를 추가합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Subsystem 생성",
+                "parameters": [
+                    {
+                        "description": "NVMe-oF subsystem request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NVMeOfSubsystemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "지정한 subsystem을 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Subsystem 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NVMe-oF subsystem NQN",
+                        "name": "subsystem_nqn_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/nvmeof/target": {
+            "get": {
+                "description": "SCVM 로컬 NVMe-oF daemon container의 SPDK RPC로 target 목록 또는 상세를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Target 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NVMe-oF subsystem NQN",
+                        "name": "subsystem_nqn_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "subsystem, listener, host allow, namespace를 순서대로 구성합니다. size가 있으면 RBD image도 생성합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-NVMeOF"
+                ],
+                "summary": "NVMe-oF Target 생성",
+                "parameters": [
+                    {
+                        "description": "NVMe-oF target request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.NVMeOfTargetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/pool": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph osd pool ls 명령 기반으로 pool 목록을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Pool"
+                ],
+                "summary": "Pool 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pool type/name filter",
+                        "name": "pool_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/pool/{pool_name}": {
+            "delete": {
+                "description": "SCVM 로컬에서 ceph osd pool rm 명령 기반으로 pool을 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Pool"
+                ],
+                "summary": "Pool 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pool name",
+                        "name": "pool_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/pw": {
+            "get": {
+                "description": "Legacy password encryption helper API 골격입니다. 실제 사용 여부는 신규 Glue-Core 이식 범위에서 재검토합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Core"
+                ],
+                "summary": "Password Helper",
+                "responses": {
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/rgw": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph orch ls/ps 명령 기반으로 RGW service와 daemon 상태를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Daemon 상태",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "SCVM 로컬에서 radosgw-admin realm/zone 명령과 ceph orch apply rgw 명령으로 RGW service를 생성/수정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Service 변경",
+                "parameters": [
+                    {
+                        "description": "RGW service request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 radosgw-admin realm/zone 명령과 ceph orch apply rgw 명령으로 RGW service를 생성/수정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Service 변경",
+                "parameters": [
+                    {
+                        "description": "RGW service request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/rgw/bucket": {
+            "get": {
+                "description": "SCVM 로컬에서 radosgw-admin bucket list/stats 명령 기반으로 RGW bucket을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Bucket 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RGW bucket name",
+                        "name": "bucket_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "true",
+                            "false"
+                        ],
+                        "type": "string",
+                        "description": "show bucket stats",
+                        "name": "detail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Bucket 변경",
+                "parameters": [
+                    {
+                        "description": "RGW bucket request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWBucketRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Bucket 변경",
+                "parameters": [
+                    {
+                        "description": "RGW bucket request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWBucketRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Bucket 변경",
+                "parameters": [
+                    {
+                        "description": "RGW bucket request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWBucketRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/rgw/quota": {
+            "post": {
+                "description": "SCVM 로컬에서 radosgw-admin quota set/enable/disable 명령으로 quota를 설정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW Quota 수정",
+                "parameters": [
+                    {
+                        "description": "RGW quota request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWQuotaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/rgw/user": {
+            "get": {
+                "description": "SCVM 로컬에서 radosgw-admin user list/info/stats 명령 기반으로 RGW user를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW User 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RGW user name",
+                        "name": "username",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW User 변경",
+                "parameters": [
+                    {
+                        "description": "RGW user request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW User 변경",
+                "parameters": [
+                    {
+                        "description": "RGW user request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-RGW"
+                ],
+                "summary": "RGW User 변경",
+                "parameters": [
+                    {
+                        "description": "RGW user request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.RGWUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/service": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph orch ls 명령 기반으로 orchestrator service를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Service"
+                ],
+                "summary": "Service 목록",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "service name",
+                        "name": "service_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "service type",
+                        "name": "service_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/service/{service_name}": {
+            "post": {
+                "description": "SCVM 로컬에서 ceph orch start/stop/restart/redeploy 명령 기반으로 orchestrator service를 제어합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Service"
+                ],
+                "summary": "Service 제어",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "service name",
+                        "name": "service_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "start",
+                            "stop",
+                            "restart",
+                            "redeploy"
+                        ],
+                        "type": "string",
+                        "description": "service control",
+                        "name": "control",
+                        "in": "query"
+                    },
+                    {
+                        "description": "service control request",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.ServiceControlRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬에서 ceph orch rm 명령 기반으로 orchestrator service를 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Service"
+                ],
+                "summary": "Service 삭제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "service name",
+                        "name": "service_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/smb": {
+            "get": {
+                "description": "SCVM 로컬 Samba 실행 스크립트의 select 결과로 SMB 상태를 조회합니다. 기존 glue-api의 SSH host 반복은 사용하지 않습니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB 상태",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬에서 기존 SMB 구성을 정리한 뒤 SMB service와 최초 share를 생성합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB 생성",
+                "parameters": [
+                    {
+                        "description": "SMB share request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.SMBShareRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬 SMB service와 share 구성을 삭제합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB 삭제",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/smb/folder": {
+            "post": {
+                "description": "SCVM 로컬 SMB service에 share folder를 추가합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB Folder 추가",
+                "parameters": [
+                    {
+                        "description": "SMB folder request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.SMBFolderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬 SMB share folder와 관련 mount 구성을 삭제합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB Folder 삭제",
+                "parameters": [
+                    {
+                        "description": "SMB folder delete request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.SMBFolderDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/smb/user": {
+            "put": {
+                "description": "SCVM 로컬 SMB user password를 수정합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB User 수정",
+                "parameters": [
+                    {
+                        "description": "SMB user request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.SMBUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "SCVM 로컬 SMB user를 생성합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB User 생성",
+                "parameters": [
+                    {
+                        "description": "SMB user request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.SMBUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "SCVM 로컬 SMB user를 삭제합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-SMB"
+                ],
+                "summary": "SMB User 삭제",
+                "parameters": [
+                    {
+                        "description": "SMB user delete request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.SMBUserDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/status": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph -s -f json 명령 기반으로 Glue-Core cluster 상태를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Core"
+                ],
+                "summary": "Cluster 상태",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/glue/version": {
+            "get": {
+                "description": "SCVM 로컬에서 ceph versions 명령 기반으로 Glue-Core daemon version을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Glue-Core"
+                ],
+                "summary": "Daemon 버전",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "description": "라이선스 등록 전 bootstrap 단계에서도 사용할 수 있는 API 서버 생존 확인입니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "API Health",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_cube.ClusterHealthResponse"
                         }
                     }
                 }
@@ -2648,7 +6124,7 @@ const docTemplate = `{
         },
         "/version": {
             "get": {
-                "description": "CUBE 의 버전을 보여줍니다.",
+                "description": "OS, Kernel, Cockpit, Mold, ABLESTACK 패키지, Glue 버전을 보여줍니다. Glue 버전은 ablestack-hci/ablestack-hci-filesystem에서만 포함합니다.",
                 "consumes": [
                     "application/x-www-form-urlencoded"
                 ],
@@ -2656,7 +6132,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CUBE - Version"
+                    "CubeModel"
                 ],
                 "summary": "Show Versions of CUBE",
                 "responses": {
@@ -2796,1549 +6272,31 @@ const docTemplate = `{
                 }
             }
         },
-        "TypeAuth": {
-            "type": "object",
-            "properties": {
-                "auth": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/TypeAuth"
-                    }
-                },
-                "refreshTime": {
-                    "type": "string"
-                }
-            }
-        },
-        "TypeGlueStatus": {
-            "description": "Glue의 상태를 나타내는 구조체",
-            "type": "object",
-            "properties": {
-                "election_epoch": {
-                    "type": "integer",
-                    "format": "uint32",
-                    "example": 148
-                },
-                "fsid": {
-                    "description": "Glue클러스터를 구분하는 ID",
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "9980ffe8-4bc1-11ee-9b1f-002481004170"
-                },
-                "fsmap": {
-                    "type": "object",
-                    "properties": {
-                        "by_rank": {
-                            "type": "array",
-                            "items": {}
-                        },
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "up:standby": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "health": {
-                    "type": "object",
-                    "properties": {
-                        "checks": {
-                            "type": "object",
-                            "properties": {
-                                "OSDMAP_FLAGS": {
-                                    "type": "object",
-                                    "properties": {
-                                        "muted": {
-                                            "type": "boolean"
-                                        },
-                                        "severity": {
-                                            "type": "string"
-                                        },
-                                        "summary": {
-                                            "type": "object",
-                                            "properties": {
-                                                "count": {
-                                                    "type": "integer"
-                                                },
-                                                "message": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                "OSD_DOWN": {
-                                    "type": "object",
-                                    "properties": {
-                                        "muted": {
-                                            "type": "boolean"
-                                        },
-                                        "severity": {
-                                            "type": "string"
-                                        },
-                                        "summary": {
-                                            "type": "object",
-                                            "properties": {
-                                                "count": {
-                                                    "type": "integer"
-                                                },
-                                                "message": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                "PG_AVAILABILITY": {
-                                    "type": "object",
-                                    "properties": {
-                                        "muted": {
-                                            "type": "boolean"
-                                        },
-                                        "severity": {
-                                            "type": "string"
-                                        },
-                                        "summary": {
-                                            "type": "object",
-                                            "properties": {
-                                                "count": {
-                                                    "type": "integer"
-                                                },
-                                                "message": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "mutes": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "code": {
-                                        "type": "string"
-                                    },
-                                    "count": {
-                                        "type": "integer"
-                                    },
-                                    "sticky": {
-                                        "type": "boolean"
-                                    },
-                                    "summary": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "status": {
-                            "type": "string",
-                            "format": "string",
-                            "example": "HEALTH_WARN"
-                        }
-                    }
-                },
-                "mgrmap": {
-                    "type": "object",
-                    "properties": {
-                        "available": {
-                            "type": "boolean"
-                        },
-                        "modules": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "num_standbys": {
-                            "type": "integer"
-                        },
-                        "services": {
-                            "type": "object",
-                            "properties": {
-                                "dashboard": {
-                                    "type": "string"
-                                },
-                                "prometheus": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                },
-                "monmap": {
-                    "type": "object",
-                    "properties": {
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "min_mon_release_name": {
-                            "type": "string"
-                        },
-                        "num_mons": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "osdmap": {
-                    "type": "object",
-                    "properties": {
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "num_in_osds": {
-                            "type": "integer"
-                        },
-                        "num_osds": {
-                            "type": "integer"
-                        },
-                        "num_remapped_pgs": {
-                            "type": "integer"
-                        },
-                        "num_up_osds": {
-                            "type": "integer"
-                        },
-                        "osd_in_since": {
-                            "type": "integer"
-                        },
-                        "osd_up_since": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "pgmap": {
-                    "type": "object",
-                    "properties": {
-                        "bytes_avail": {
-                            "type": "integer"
-                        },
-                        "bytes_total": {
-                            "type": "integer"
-                        },
-                        "bytes_used": {
-                            "type": "integer"
-                        },
-                        "data_bytes": {
-                            "type": "integer"
-                        },
-                        "num_objects": {
-                            "type": "integer"
-                        },
-                        "num_pgs": {
-                            "type": "integer"
-                        },
-                        "num_pools": {
-                            "type": "integer"
-                        },
-                        "pgs_by_state": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "count": {
-                                        "type": "integer"
-                                    },
-                                    "state_name": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "read_bytes_sec": {
-                            "type": "integer"
-                        },
-                        "read_op_per_sec": {
-                            "type": "integer"
-                        },
-                        "write_bytes_sec": {
-                            "type": "integer"
-                        },
-                        "write_op_per_sec": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "progress_events": {
-                    "type": "object"
-                },
-                "quorum": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "quorum_age": {
-                    "type": "integer"
-                },
-                "quorum_names": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "refresh_time": {
-                    "type": "string"
-                },
-                "servicemap": {
-                    "type": "object",
-                    "properties": {
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "modified": {
-                            "type": "string"
-                        },
-                        "services": {
-                            "type": "object",
-                            "properties": {
-                                "rgw": {
-                                    "type": "object",
-                                    "properties": {
-                                        "daemons": {
-                                            "type": "object",
-                                            "properties": {
-                                                "326414282": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "addr": {
-                                                            "type": "string"
-                                                        },
-                                                        "gid": {
-                                                            "type": "integer"
-                                                        },
-                                                        "metadata": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "arch": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_release": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version_short": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_image": {
-                                                                    "type": "string"
-                                                                },
-                                                                "cpu": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "frontend_config#0": {
-                                                                    "type": "string"
-                                                                },
-                                                                "frontend_type#0": {
-                                                                    "type": "string"
-                                                                },
-                                                                "hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_swap_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_total_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "num_handles": {
-                                                                    "type": "string"
-                                                                },
-                                                                "os": {
-                                                                    "type": "string"
-                                                                },
-                                                                "pid": {
-                                                                    "type": "string"
-                                                                },
-                                                                "realm_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "realm_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zone_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zone_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zonegroup_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zonegroup_name": {
-                                                                    "type": "string"
-                                                                }
-                                                            }
-                                                        },
-                                                        "start_epoch": {
-                                                            "type": "integer"
-                                                        },
-                                                        "start_stamp": {
-                                                            "type": "string"
-                                                        },
-                                                        "task_status": {
-                                                            "type": "object"
-                                                        }
-                                                    }
-                                                },
-                                                "326414323": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "addr": {
-                                                            "type": "string"
-                                                        },
-                                                        "gid": {
-                                                            "type": "integer"
-                                                        },
-                                                        "metadata": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "arch": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_release": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version_short": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_image": {
-                                                                    "type": "string"
-                                                                },
-                                                                "cpu": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "frontend_config#0": {
-                                                                    "type": "string"
-                                                                },
-                                                                "frontend_type#0": {
-                                                                    "type": "string"
-                                                                },
-                                                                "hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_swap_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_total_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "num_handles": {
-                                                                    "type": "string"
-                                                                },
-                                                                "os": {
-                                                                    "type": "string"
-                                                                },
-                                                                "pid": {
-                                                                    "type": "string"
-                                                                },
-                                                                "realm_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "realm_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zone_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zone_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zonegroup_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zonegroup_name": {
-                                                                    "type": "string"
-                                                                }
-                                                            }
-                                                        },
-                                                        "start_epoch": {
-                                                            "type": "integer"
-                                                        },
-                                                        "start_stamp": {
-                                                            "type": "string"
-                                                        },
-                                                        "task_status": {
-                                                            "type": "object"
-                                                        }
-                                                    }
-                                                },
-                                                "326414647": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "addr": {
-                                                            "type": "string"
-                                                        },
-                                                        "gid": {
-                                                            "type": "integer"
-                                                        },
-                                                        "metadata": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "arch": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_release": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version_short": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_image": {
-                                                                    "type": "string"
-                                                                },
-                                                                "cpu": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "frontend_config#0": {
-                                                                    "type": "string"
-                                                                },
-                                                                "frontend_type#0": {
-                                                                    "type": "string"
-                                                                },
-                                                                "hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_swap_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_total_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "num_handles": {
-                                                                    "type": "string"
-                                                                },
-                                                                "os": {
-                                                                    "type": "string"
-                                                                },
-                                                                "pid": {
-                                                                    "type": "string"
-                                                                },
-                                                                "realm_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "realm_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zone_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zone_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zonegroup_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "zonegroup_name": {
-                                                                    "type": "string"
-                                                                }
-                                                            }
-                                                        },
-                                                        "start_epoch": {
-                                                            "type": "integer"
-                                                        },
-                                                        "start_stamp": {
-                                                            "type": "string"
-                                                        },
-                                                        "task_status": {
-                                                            "type": "object"
-                                                        }
-                                                    }
-                                                },
-                                                "summary": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                "tcmu-runner": {
-                                    "type": "object",
-                                    "properties": {
-                                        "daemons": {
-                                            "type": "object",
-                                            "properties": {
-                                                "scvm2:rbd/iscsi1": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "addr": {
-                                                            "type": "string"
-                                                        },
-                                                        "gid": {
-                                                            "type": "integer"
-                                                        },
-                                                        "metadata": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "arch": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_release": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version_short": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_image": {
-                                                                    "type": "string"
-                                                                },
-                                                                "cpu": {
-                                                                    "type": "string"
-                                                                },
-                                                                "daemon_prefix": {
-                                                                    "type": "string"
-                                                                },
-                                                                "daemon_type": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "image_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "image_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_swap_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_total_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "os": {
-                                                                    "type": "string"
-                                                                },
-                                                                "pool_name": {
-                                                                    "type": "string"
-                                                                }
-                                                            }
-                                                        },
-                                                        "start_epoch": {
-                                                            "type": "integer"
-                                                        },
-                                                        "start_stamp": {
-                                                            "type": "string"
-                                                        },
-                                                        "task_status": {
-                                                            "type": "object"
-                                                        }
-                                                    }
-                                                },
-                                                "scvm2:rbd/iscsi2": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "addr": {
-                                                            "type": "string"
-                                                        },
-                                                        "gid": {
-                                                            "type": "integer"
-                                                        },
-                                                        "metadata": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "arch": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_release": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version_short": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_image": {
-                                                                    "type": "string"
-                                                                },
-                                                                "cpu": {
-                                                                    "type": "string"
-                                                                },
-                                                                "daemon_prefix": {
-                                                                    "type": "string"
-                                                                },
-                                                                "daemon_type": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "image_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "image_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_swap_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_total_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "os": {
-                                                                    "type": "string"
-                                                                },
-                                                                "pool_name": {
-                                                                    "type": "string"
-                                                                }
-                                                            }
-                                                        },
-                                                        "start_epoch": {
-                                                            "type": "integer"
-                                                        },
-                                                        "start_stamp": {
-                                                            "type": "string"
-                                                        },
-                                                        "task_status": {
-                                                            "type": "object"
-                                                        }
-                                                    }
-                                                },
-                                                "scvm2:rbd/iscsi3": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "addr": {
-                                                            "type": "string"
-                                                        },
-                                                        "gid": {
-                                                            "type": "integer"
-                                                        },
-                                                        "metadata": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "arch": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_release": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "ceph_version_short": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "container_image": {
-                                                                    "type": "string"
-                                                                },
-                                                                "cpu": {
-                                                                    "type": "string"
-                                                                },
-                                                                "daemon_prefix": {
-                                                                    "type": "string"
-                                                                },
-                                                                "daemon_type": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "distro_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "hostname": {
-                                                                    "type": "string"
-                                                                },
-                                                                "image_id": {
-                                                                    "type": "string"
-                                                                },
-                                                                "image_name": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_description": {
-                                                                    "type": "string"
-                                                                },
-                                                                "kernel_version": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_swap_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "mem_total_kb": {
-                                                                    "type": "string"
-                                                                },
-                                                                "os": {
-                                                                    "type": "string"
-                                                                },
-                                                                "pool_name": {
-                                                                    "type": "string"
-                                                                }
-                                                            }
-                                                        },
-                                                        "start_epoch": {
-                                                            "type": "integer"
-                                                        },
-                                                        "start_stamp": {
-                                                            "type": "string"
-                                                        },
-                                                        "task_status": {
-                                                            "type": "object"
-                                                        }
-                                                    }
-                                                },
-                                                "summary": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "TypeGlueStorageSize": {
-            "type": "object",
-            "properties": {
-                "pools": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGluePools"
-                    }
-                },
-                "stats": {
-                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueStorageStats"
-                },
-                "stats_by_class": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueClass"
-                    }
-                }
-            }
-        },
-        "TypeMoldStatus": {
-            "description": "Glue의 상태를 나타내는 구조체",
-            "type": "object",
-            "properties": {
-                "election_epoch": {
-                    "type": "integer",
-                    "format": "uint32",
-                    "example": 148
-                },
-                "fsid": {
-                    "description": "Glue클러스터를 구분하는 ID",
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "9980ffe8-4bc1-11ee-9b1f-002481004170"
-                },
-                "fsmap": {
-                    "type": "object",
-                    "properties": {
-                        "by_rank": {
-                            "type": "array",
-                            "items": {}
-                        },
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "up:standby": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "health": {
-                    "type": "object",
-                    "properties": {
-                        "checks": {},
-                        "mutes": {},
-                        "status": {
-                            "type": "string",
-                            "format": "string",
-                            "example": "HEALTH_WARN"
-                        }
-                    }
-                },
-                "mgrmap": {
-                    "type": "object",
-                    "properties": {
-                        "available": {
-                            "type": "boolean"
-                        },
-                        "modules": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "num_standbys": {
-                            "type": "integer"
-                        },
-                        "services": {
-                            "type": "object",
-                            "properties": {
-                                "dashboard": {
-                                    "type": "string"
-                                },
-                                "prometheus": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                },
-                "monmap": {
-                    "type": "object",
-                    "properties": {
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "min_mon_release_name": {
-                            "type": "string"
-                        },
-                        "num_mons": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "osdmap": {
-                    "type": "object",
-                    "properties": {
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "num_in_osds": {
-                            "type": "integer"
-                        },
-                        "num_osds": {
-                            "type": "integer"
-                        },
-                        "num_remapped_pgs": {
-                            "type": "integer"
-                        },
-                        "num_up_osds": {
-                            "type": "integer"
-                        },
-                        "osd_in_since": {
-                            "type": "integer"
-                        },
-                        "osd_up_since": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "pgmap": {
-                    "type": "object",
-                    "properties": {
-                        "bytes_avail": {
-                            "type": "integer"
-                        },
-                        "bytes_total": {
-                            "type": "integer"
-                        },
-                        "bytes_used": {
-                            "type": "integer"
-                        },
-                        "data_bytes": {
-                            "type": "integer"
-                        },
-                        "num_objects": {
-                            "type": "integer"
-                        },
-                        "num_pgs": {
-                            "type": "integer"
-                        },
-                        "num_pools": {
-                            "type": "integer"
-                        },
-                        "pgs_by_state": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "count": {
-                                        "type": "integer"
-                                    },
-                                    "state_name": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "read_bytes_sec": {
-                            "type": "integer"
-                        },
-                        "read_op_per_sec": {
-                            "type": "integer"
-                        },
-                        "write_bytes_sec": {
-                            "type": "integer"
-                        },
-                        "write_op_per_sec": {
-                            "type": "integer"
-                        }
-                    }
-                },
-                "progress_events": {
-                    "type": "object"
-                },
-                "quorum": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "quorum_age": {
-                    "type": "integer"
-                },
-                "quorum_names": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "refresh_time": {
-                    "type": "string"
-                },
-                "servicemap": {
-                    "type": "object",
-                    "properties": {
-                        "epoch": {
-                            "type": "integer"
-                        },
-                        "modified": {
-                            "type": "string"
-                        },
-                        "services": {}
-                    }
-                }
-            }
-        },
-        "TypePCSStatus": {
-            "type": "object",
-            "properties": {
-                "apiVersion": {
-                    "description": "XMLName    xml.Name ` + "`" + `xml:\"PCS-result\"` + "`" + `\nText       string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                    "type": "string"
-                },
-                "bans": {
-                    "type": "object",
-                    "properties": {
-                        "ban": {
-                            "description": "Text string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {
-                                        "description": "Text         string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                        "type": "string"
-                                    },
-                                    "masterOnly": {
-                                        "type": "string"
-                                    },
-                                    "node": {
-                                        "type": "string"
-                                    },
-                                    "promotedOnly": {
-                                        "type": "string"
-                                    },
-                                    "resource": {
-                                        "type": "string"
-                                    },
-                                    "weight": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "nodeHistory": {
-                    "type": "object",
-                    "properties": {
-                        "node": {
-                            "description": "Text string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "description": "Text            string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                        "type": "string"
-                                    },
-                                    "resourceHistory": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "id": {
-                                                    "description": "Text               string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                                    "type": "string"
-                                                },
-                                                "migrationThreshold": {
-                                                    "type": "string"
-                                                },
-                                                "operationHistory": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "call": {
-                                                                "description": "Text         string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                                                "type": "string"
-                                                            },
-                                                            "execTime": {
-                                                                "type": "string"
-                                                            },
-                                                            "interval": {
-                                                                "type": "string"
-                                                            },
-                                                            "lastRcChange": {
-                                                                "type": "string"
-                                                            },
-                                                            "queueTime": {
-                                                                "type": "string"
-                                                            },
-                                                            "rc": {
-                                                                "type": "string"
-                                                            },
-                                                            "rcText": {
-                                                                "type": "string"
-                                                            },
-                                                            "task": {
-                                                                "type": "string"
-                                                            }
-                                                        }
-                                                    }
-                                                },
-                                                "orphan": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "nodes": {
-                    "type": "object",
-                    "properties": {
-                        "node": {
-                            "description": "Text string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "expectedUp": {
-                                        "type": "string"
-                                    },
-                                    "featureSet": {
-                                        "type": "string"
-                                    },
-                                    "health": {
-                                        "type": "string"
-                                    },
-                                    "id": {
-                                        "type": "string"
-                                    },
-                                    "isDc": {
-                                        "type": "string"
-                                    },
-                                    "maintenance": {
-                                        "type": "string"
-                                    },
-                                    "name": {
-                                        "description": "Text             string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                        "type": "string"
-                                    },
-                                    "online": {
-                                        "type": "string"
-                                    },
-                                    "pending": {
-                                        "type": "string"
-                                    },
-                                    "resourcesRunning": {
-                                        "type": "string"
-                                    },
-                                    "shutdown": {
-                                        "type": "string"
-                                    },
-                                    "standby": {
-                                        "type": "string"
-                                    },
-                                    "standbyOnfail": {
-                                        "type": "string"
-                                    },
-                                    "type": {
-                                        "type": "string"
-                                    },
-                                    "unclean": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "refreshTime": {
-                    "type": "string"
-                },
-                "request": {
-                    "type": "string"
-                },
-                "resources": {
-                    "type": "object",
-                    "properties": {
-                        "clone": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_pcs.TypePCSClone"
-                            }
-                        },
-                        "resource": {
-                            "description": "Text     string            ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/TypePCSesource"
-                            }
-                        }
-                    }
-                },
-                "status": {
-                    "type": "object",
-                    "properties": {
-                        "code": {
-                            "description": "Text    string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "string"
-                        },
-                        "message": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "summary": {
-                    "type": "object",
-                    "properties": {
-                        "clusterOptions": {
-                            "type": "object",
-                            "properties": {
-                                "maintenanceMode": {
-                                    "type": "string"
-                                },
-                                "noQuorumPolicy": {
-                                    "type": "string"
-                                },
-                                "priorityFencingDelayMs": {
-                                    "type": "string"
-                                },
-                                "stonithEnabled": {
-                                    "description": "Text                   string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                },
-                                "stonithTimeoutMs": {
-                                    "type": "string"
-                                },
-                                "stopAllResources": {
-                                    "type": "string"
-                                },
-                                "symmetricCluster": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "currentDc": {
-                            "type": "object",
-                            "properties": {
-                                "id": {
-                                    "type": "string"
-                                },
-                                "mixedVersion": {
-                                    "type": "string"
-                                },
-                                "name": {
-                                    "type": "string"
-                                },
-                                "present": {
-                                    "description": "Text         string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                },
-                                "version": {
-                                    "type": "string"
-                                },
-                                "withQuorum": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "lastChange": {
-                            "type": "object",
-                            "properties": {
-                                "client": {
-                                    "type": "string"
-                                },
-                                "origin": {
-                                    "type": "string"
-                                },
-                                "time": {
-                                    "description": "Text   string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                },
-                                "user": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "lastUpdate": {
-                            "type": "object",
-                            "properties": {
-                                "origin": {
-                                    "type": "string"
-                                },
-                                "time": {
-                                    "description": "Text   string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "nodesConfigured": {
-                            "type": "object",
-                            "properties": {
-                                "number": {
-                                    "description": "Text   string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "resourcesConfigured": {
-                            "type": "object",
-                            "properties": {
-                                "blocked": {
-                                    "type": "string"
-                                },
-                                "disabled": {
-                                    "type": "string"
-                                },
-                                "number": {
-                                    "description": "Text     string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "stack": {
-                            "description": "Text  string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "object",
-                            "properties": {
-                                "pcsdState": {
-                                    "type": "string"
-                                },
-                                "type": {
-                                    "description": "Text      string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "TypePCSesource": {
-            "type": "object",
-            "properties": {
-                "active": {
-                    "type": "string"
-                },
-                "blocked": {
-                    "type": "string"
-                },
-                "failed": {
-                    "type": "string"
-                },
-                "failureIgnored": {
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Text           string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                    "type": "string"
-                },
-                "maintenance": {
-                    "type": "string"
-                },
-                "managed": {
-                    "type": "string"
-                },
-                "node": {
-                    "type": "object",
-                    "properties": {
-                        "cached": {
-                            "type": "string"
-                        },
-                        "id": {
-                            "type": "string"
-                        },
-                        "name": {
-                            "description": "Text   string ` + "`" + `xml:\",chardata\"` + "`" + `",
-                            "type": "string"
-                        }
-                    }
-                },
-                "nodesRunningOn": {
-                    "type": "string"
-                },
-                "orphaned": {
-                    "type": "string"
-                },
-                "resourceAgent": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                }
-            }
-        },
-        "TypeStorageCenterCluster": {
-            "type": "object",
-            "properties": {
-                "cluster-status": {
-                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_dashboard.TypeClusterStatus"
-                },
-                "daemons": {
-                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemons"
-                },
-                "disks": {
-                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_dashboard.TypeDisks"
-                },
-                "gateways": {
-                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_dashboard.TypeGateways"
-                },
-                "refresh-time": {
-                    "type": "string"
-                },
-                "storage-pools": {
-                    "$ref": "#/definitions/TypeGlueStorageSize"
-                }
-            }
-        },
         "ablecloud_io_ablestack-api_internal_infra_utils.TypeVersion": {
             "type": "object",
             "properties": {
+                "ablestack_package_versions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "cockpit_version": {
+                    "type": "string"
+                },
                 "debug": {
                     "type": "boolean"
                 },
-                "version": {
+                "glue_version": {
+                    "type": "string"
+                },
+                "kernel_version": {
+                    "type": "string"
+                },
+                "mold_version": {
+                    "type": "string"
+                },
+                "os_version": {
                     "type": "string"
                 }
             }
@@ -5607,6 +7565,255 @@ const docTemplate = `{
                 "val": {}
             }
         },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployRunJob": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "current_step": {
+                    "type": "string",
+                    "example": "scvm_prepare"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string",
+                    "example": "018f9c39-7ca9-7f4e-9a04-f6373d8f7e2b"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "mode": {
+                    "type": "string",
+                    "example": "all"
+                },
+                "os_type": {
+                    "type": "string",
+                    "example": "ablestack-hci"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "running"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunStepResult"
+                    }
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployRunJobListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunJob"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployRunJobResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "job": {
+                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunJob"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployRunRequest": {
+            "type": "object",
+            "properties": {
+                "ccvm_cloudinit": {
+                    "description": "optional CCVM cloud-init service-network override.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.CCVMCloudInitCreateRequest"
+                        }
+                    ]
+                },
+                "ccvm_lifecycle": {
+                    "description": "optional CCVM lifecycle request. Defaults to setup when ccvm_xml is provided.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.CCVMLifecycleRequest"
+                        }
+                    ]
+                },
+                "ccvm_xml": {
+                    "description": "CCVM XML request.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.CCVMXMLCreateRequest"
+                        }
+                    ]
+                },
+                "cluster": {
+                    "description": "cluster apply request. If omitted, cluster_apply is skipped unless explicitly selected.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterApplyRequest"
+                        }
+                    ]
+                },
+                "force_reset": {
+                    "description": "allow reset/destructive future steps. Current implementation does not run destructive reset by default.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "gfs": {
+                    "description": "GFS/PCS storage request for VM/HCI filesystem flows.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.GFSManageRequest"
+                        }
+                    ]
+                },
+                "license_content": {
+                    "description": "license file content (base64). If empty, current local license is reused by license_apply.",
+                    "type": "string",
+                    "example": "BASE64_CONTENT"
+                },
+                "license_filename": {
+                    "description": "license filename used when saving on targets.",
+                    "type": "string",
+                    "example": "license.lic"
+                },
+                "licenses": {
+                    "description": "host-specific license content keyed by hostname, ablecube IP, index, or scvmN name.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "local": {
+                    "description": "local storage request for standalone flows.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LocalManageRequest"
+                        }
+                    ]
+                },
+                "mode": {
+                    "description": "mode: all/partial. all is the default.",
+                    "type": "string",
+                    "example": "all"
+                },
+                "only": {
+                    "description": "run only these steps.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "license_apply",
+                        "cluster_apply",
+                        "scvm_bootstrap",
+                        "ccvm_bootstrap"
+                    ]
+                },
+                "scvm_by_host": {
+                    "description": "host-specific SCVM XML requests keyed by hostname, ablecube IP, index, or scvmN name.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.SCVMXMLCreateRequest"
+                    }
+                },
+                "skip": {
+                    "description": "skip these steps.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "local_prepare"
+                    ]
+                },
+                "update_system_profile": {
+                    "description": "update systemProfile flags for successfully executed steps. Defaults to true.",
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployRunStartResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 202
+                },
+                "job_id": {
+                    "type": "string",
+                    "example": "018f9c39-7ca9-7f4e-9a04-f6373d8f7e2b"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "deploy job started"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "queued"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.DeployRunStepResult"
+                    }
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.DeployRunStepResult": {
+            "type": "object",
+            "properties": {
+                "duration_ms": {
+                    "type": "integer",
+                    "example": 1200
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "cluster_apply"
+                },
+                "output": {},
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "succeeded"
+                }
+            }
+        },
         "ablecloud_io_ablestack-api_internal_model_cube.DeployStatusData": {
             "type": "object",
             "properties": {
@@ -6258,24 +8465,110 @@ const docTemplate = `{
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_cube.LicenseRequest": {
+        "ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyRequest": {
             "type": "object",
             "properties": {
                 "action": {
-                    "description": "action: status/register",
+                    "description": "action: register/status",
                     "type": "string",
-                    "example": "status"
+                    "example": "register"
+                },
+                "filename": {
+                    "description": "license filename used when saving on targets",
+                    "type": "string",
+                    "example": "license.lic"
                 },
                 "license_content": {
-                    "description": "license file content (base64)",
+                    "description": "license file content (base64). If empty for register, current local license is reused.",
                     "type": "string",
                     "example": "BASE64_CONTENT"
                 },
-                "original_filename": {
-                    "description": "original filename",
-                    "type": "string",
-                    "example": "license.lic"
+                "licenses": {
+                    "description": "host-specific license content keyed by hostname, role name, target IP, index, or scvmN name.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "roles": {
+                    "description": "target roles: ablecube/scvm/ccvm/all. Defaults to ablecube for backward compatibility.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "ablecube",
+                        "scvm",
+                        "ccvm"
+                    ]
+                },
+                "target_hostnames": {
+                    "description": "explicit target hostnames from cluster.json hosts[].hostname. ccvm can be selected with \"ccvm\".",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "ablecube31-1",
+                        "ablecube31-2"
+                    ]
+                },
+                "targets": {
+                    "description": "explicit target IPs. If set, roles are ignored.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "10.10.31.1",
+                        "10.10.31.2"
+                    ]
                 }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "message": {
+                    "type": "string",
+                    "example": "license apply success"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyTargetResult"
+                    }
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyTargetResult": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "hostname": {
+                    "type": "string",
+                    "example": "ablecube31-1"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "ablecube"
+                },
+                "target": {
+                    "type": "string",
+                    "example": "10.10.31.1"
+                },
+                "val": {}
             }
         },
         "ablecloud_io_ablestack-api_internal_model_cube.LicenseResponse": {
@@ -6688,10 +8981,20 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 4
                 },
+                "disk_passthrough_list": {
+                    "description": "DISK passthrough block device 목록",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "/dev/disk/by-id/wwn-0x1234"
+                    ]
+                },
                 "disk_type": {
-                    "description": "disk type: raid_passthrough/lun_passthrough",
+                    "description": "disk type: raid_passthrough/lun_passthrough/disk_passthrough",
                     "type": "string",
-                    "example": "lun_passthrough"
+                    "example": "disk_passthrough"
                 },
                 "lun_passthrough_list": {
                     "description": "LUN passthrough block device 목록",
@@ -7051,431 +9354,843 @@ const docTemplate = `{
                 "val": {}
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_dashboard.TypeClusterStatus": {
+        "ablecloud_io_ablestack-api_internal_model_glue.GlueFSPlacementRequest": {
             "type": "object",
             "properties": {
-                "message": {
+                "hosts": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "example": [
+                        "scvm"
+                    ]
                 },
-                "status": {
-                    "type": "string"
+                "new_name": {
+                    "type": "string",
+                    "example": "gluefs2"
+                },
+                "old_name": {
+                    "type": "string",
+                    "example": "gluefs"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_dashboard.TypeDisks": {
+        "ablecloud_io_ablestack-api_internal_model_glue.GlueFSSubvolumeGroupRequest": {
             "type": "object",
             "properties": {
-                "in": {
-                    "type": "integer"
+                "data_pool_name": {
+                    "type": "string",
+                    "example": "gluefs.data"
                 },
-                "total": {
-                    "type": "integer"
+                "group_name": {
+                    "type": "string",
+                    "example": "group01"
                 },
-                "up": {
-                    "type": "integer"
+                "mode": {
+                    "type": "string",
+                    "example": "755"
+                },
+                "new_size": {
+                    "type": "integer",
+                    "example": 20
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "vol_name": {
+                    "type": "string",
+                    "example": "gluefs"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_dashboard.TypeGateways": {
+        "ablecloud_io_ablestack-api_internal_model_glue.ISCSIAuthRequest": {
             "type": "object",
             "properties": {
-                "quorum": {
+                "mutual_password": {
+                    "type": "string",
+                    "example": "password5678"
+                },
+                "mutual_user": {
+                    "type": "string",
+                    "example": "mutualuser"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "password1234"
+                },
+                "user": {
+                    "type": "string",
+                    "example": "iscsiuser"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.ISCSIServiceRequest": {
+            "type": "object",
+            "properties": {
+                "api_password": {
+                    "type": "string",
+                    "example": "password"
+                },
+                "api_port": {
+                    "type": "integer",
+                    "example": 5000
+                },
+                "api_user": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "count": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "hosts": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "example": [
+                        "scvm"
+                    ]
                 },
-                "total": {
-                    "type": "integer"
+                "pool": {
+                    "type": "string",
+                    "example": "rbd"
                 },
-                "up": {
-                    "type": "integer"
-                }
-            }
-        },
-        "ablecloud_io_ablestack-api_internal_model_glue.TypeGlueClass": {
-            "type": "object",
-            "properties": {
-                "total_avail_bytes": {
-                    "type": "integer"
+                "service_id": {
+                    "type": "string",
+                    "example": "iscsi"
                 },
-                "total_bytes": {
-                    "type": "integer"
-                },
-                "total_used_bytes": {
-                    "type": "integer"
-                },
-                "total_used_raw_bytes": {
-                    "type": "integer"
-                },
-                "total_used_raw_ratio": {
-                    "type": "number"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon": {
-            "type": "object",
-            "properties": {
-                "container_id": {
-                    "type": "string"
-                },
-                "container_image_digests": {
+                "trusted_ip_list": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "example": [
+                        "10.10.10.11"
+                    ]
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "iqn_id": {
+                    "type": "string",
+                    "example": "iqn.2026-06.io.ablecloud:target01"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetRequest": {
+            "type": "object",
+            "properties": {
+                "acl_enabled": {
+                    "type": "boolean",
+                    "example": false
                 },
-                "container_image_id": {
-                    "type": "string"
-                },
-                "container_image_name": {
-                    "type": "string"
-                },
-                "cpu_percentage": {
-                    "type": "string"
-                },
-                "created": {
-                    "type": "string"
-                },
-                "daemon_id": {
-                    "type": "string"
-                },
-                "daemon_name": {
-                    "type": "string"
-                },
-                "daemon_type": {
-                    "type": "string"
-                },
-                "events": {
+                "hosts": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "example": [
+                        "scvm"
+                    ]
                 },
-                "hostname": {
-                    "type": "string"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "last_refresh": {
-                    "type": "string"
-                },
-                "memory_request": {
-                    "type": "integer"
-                },
-                "memory_usage": {
-                    "type": "integer"
-                },
-                "ports": {
+                "image_name": {
                     "type": "array",
                     "items": {
-                        "type": "integer"
-                    }
+                        "type": "string"
+                    },
+                    "example": [
+                        "vm01"
+                    ]
+                },
+                "ip_address": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "10.10.10.11"
+                    ]
+                },
+                "iqn_id": {
+                    "type": "string",
+                    "example": "iqn.2026-06.io.ablecloud:target01"
+                },
+                "mutual_password": {
+                    "type": "string",
+                    "example": "password5678"
+                },
+                "mutual_username": {
+                    "type": "string",
+                    "example": "mutualuser"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "password1234"
+                },
+                "pool_name": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "rbd"
+                    ]
+                },
+                "username": {
+                    "type": "string",
+                    "example": "iscsiuser"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.ISCSITargetUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "acl_enabled": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "image_name": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "vm01"
+                    ]
+                },
+                "ip_address": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "10.10.10.11"
+                    ]
+                },
+                "iqn_id": {
+                    "type": "string",
+                    "example": "iqn.2026-06.io.ablecloud:target01"
+                },
+                "mutual_password": {
+                    "type": "string",
+                    "example": "password5678"
+                },
+                "mutual_username": {
+                    "type": "string",
+                    "example": "mutualuser"
+                },
+                "new_iqn_id": {
+                    "type": "string",
+                    "example": "iqn.2026-06.io.ablecloud:target02"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "password1234"
+                },
+                "pool_name": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "rbd"
+                    ]
+                },
+                "username": {
+                    "type": "string",
+                    "example": "iscsiuser"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.ImageRequest": {
+            "type": "object",
+            "properties": {
+                "image_name": {
+                    "type": "string",
+                    "example": "vm01"
+                },
+                "pool_name": {
+                    "type": "string",
+                    "example": "rbd"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 10
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.MirrorClusterRequest": {
+            "type": "object",
+            "properties": {
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "interval": {
+                    "type": "string",
+                    "example": "1h"
+                },
+                "local_cluster_name": {
+                    "type": "string",
+                    "example": "scvm-a"
+                },
+                "mirror_pool": {
+                    "type": "string",
+                    "example": "rbd"
+                },
+                "remote_token": {
+                    "type": "string",
+                    "example": "eyJmc2lkIjoi..."
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.MirrorPoolRequest": {
+            "type": "object",
+            "properties": {
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "interval": {
+                    "type": "string",
+                    "example": "1h"
+                },
+                "local_cluster_name": {
+                    "type": "string",
+                    "example": "scvm-a"
+                },
+                "remote_token": {
+                    "type": "string",
+                    "example": "eyJmc2lkIjoi..."
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NFSClusterRequest": {
+            "type": "object",
+            "properties": {
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "service_count": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NFSExportRequest": {
+            "type": "object",
+            "properties": {
+                "access_type": {
+                    "type": "string",
+                    "enum": [
+                        "RW",
+                        "RO",
+                        "NONE"
+                    ],
+                    "example": "RW"
+                },
+                "export_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "fs_name": {
+                    "type": "string",
+                    "example": "gluefs"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/volumes/group01"
+                },
+                "pseudo": {
+                    "type": "string",
+                    "example": "/export01"
+                },
+                "security_label": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "squash": {
+                    "type": "string",
+                    "example": "no_root_squash"
+                },
+                "storage_name": {
+                    "type": "string",
+                    "enum": [
+                        "CEPH",
+                        "RGW"
+                    ],
+                    "example": "CEPH"
+                },
+                "transports": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "TCP"
+                    ]
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NFSIngressRequest": {
+            "type": "object",
+            "properties": {
+                "backend_service": {
+                    "type": "string",
+                    "example": "nfs.nfs-a"
+                },
+                "frontend_port": {
+                    "type": "string",
+                    "example": "2049"
+                },
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "monitor_port": {
+                    "type": "string",
+                    "example": "9049"
+                },
+                "service_id": {
+                    "type": "string",
+                    "example": "nfs-ingress"
+                },
+                "virtual_interface_networks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "10.10.10.0/24"
+                    ]
+                },
+                "virtual_ip": {
+                    "type": "string",
+                    "example": "10.10.10.100/24"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NVMeOfImageDownloadRequest": {
+            "type": "object",
+            "properties": {
+                "image": {
+                    "type": "string",
+                    "example": "localhost:15000/glue/nvmeof-cli:Diplo"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NVMeOfNamespaceRequest": {
+            "type": "object",
+            "properties": {
+                "image_name": {
+                    "type": "string",
+                    "example": "vm01"
+                },
+                "pool_name": {
+                    "type": "string",
+                    "example": "rbd"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "subsystem_nqn_id": {
+                    "type": "string",
+                    "example": "nqn.2014-08.org.nvmexpress:uuid:subsys01"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NVMeOfServiceRequest": {
+            "type": "object",
+            "properties": {
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "pool_name": {
+                    "type": "string",
+                    "example": "nvmeof"
+                },
+                "tgt_cmd_extra_args": {
+                    "type": "string",
+                    "example": "--cpumask=0xFF"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NVMeOfSubsystemRequest": {
+            "type": "object",
+            "properties": {
+                "gateway_ip": {
+                    "type": "string",
+                    "example": "10.10.10.11"
+                },
+                "gateway_name": {
+                    "type": "string",
+                    "example": "client.nvmeof.nvmeof.scvm"
+                },
+                "subsystem_nqn_id": {
+                    "type": "string",
+                    "example": "nqn.2014-08.org.nvmexpress:uuid:subsys01"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.NVMeOfTargetRequest": {
+            "type": "object",
+            "properties": {
+                "gateway_ip": {
+                    "type": "string",
+                    "example": "10.10.10.11"
+                },
+                "gateway_name": {
+                    "type": "string",
+                    "example": "client.nvmeof.nvmeof.scvm"
+                },
+                "image_name": {
+                    "type": "string",
+                    "example": "vm01"
+                },
+                "pool_name": {
+                    "type": "string",
+                    "example": "rbd"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "subsystem_nqn_id": {
+                    "type": "string",
+                    "example": "nqn.2014-08.org.nvmexpress:uuid:target01"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.RGWBucketRequest": {
+            "type": "object",
+            "properties": {
+                "bucket_id": {
+                    "type": "string",
+                    "example": "bucket-id"
+                },
+                "bucket_name": {
+                    "type": "string",
+                    "example": "bucket01"
+                },
+                "lock_enabled": {
+                    "type": "string",
+                    "enum": [
+                        "true",
+                        "false"
+                    ],
+                    "example": "false"
+                },
+                "lock_mode": {
+                    "type": "string",
+                    "enum": [
+                        "compliance",
+                        "governance"
+                    ],
+                    "example": "governance"
+                },
+                "lock_retention_period_days": {
+                    "type": "string",
+                    "example": "30"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "user01"
+                },
+                "versioning": {
+                    "type": "string",
+                    "enum": [
+                        "Enabled",
+                        "Suspended"
+                    ],
+                    "example": "Enabled"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.RGWQuotaRequest": {
+            "type": "object",
+            "properties": {
+                "max_objects": {
+                    "type": "string",
+                    "example": "1000"
+                },
+                "max_size": {
+                    "type": "string",
+                    "example": "10G"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "bucket"
+                    ],
+                    "example": "user"
+                },
+                "state": {
+                    "type": "string",
+                    "enum": [
+                        "enable",
+                        "disable"
+                    ],
+                    "example": "enable"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "user01"
+                }
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.RGWServiceRequest": {
+            "type": "object",
+            "properties": {
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "scvm"
+                    ]
+                },
+                "port": {
+                    "type": "string",
+                    "example": "8080"
+                },
+                "realm_name": {
+                    "type": "string",
+                    "example": "realm01"
                 },
                 "service_name": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "rgw.default"
                 },
-                "started": {
-                    "type": "string"
+                "zone_name": {
+                    "type": "string",
+                    "example": "zone01"
                 },
-                "status": {
-                    "type": "integer"
-                },
-                "status_desc": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "string"
+                "zonegroup_name": {
+                    "type": "string",
+                    "example": "zonegroup01"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemons": {
+        "ablecloud_io_ablestack-api_internal_model_glue.RGWUserRequest": {
             "type": "object",
             "properties": {
-                "alertmanager": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
+                "access_key": {
+                    "type": "string",
+                    "example": "accesskey"
                 },
-                "ceph-exporter": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
+                "display_name": {
+                    "type": "string",
+                    "example": "User 01"
                 },
-                "crash": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
+                "email": {
+                    "type": "string",
+                    "example": "user01@example.com"
                 },
-                "grafana": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
+                "key_type": {
+                    "type": "string",
+                    "example": "s3"
                 },
-                "iscsi": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
+                "secret_key": {
+                    "type": "string",
+                    "example": "secretkey"
                 },
-                "mds": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "mgr": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "mon": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "node-exporter": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "osd": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "other": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "prometheus": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "rbd-mirror": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
-                },
-                "refreshTime": {
-                    "type": "string"
-                },
-                "rgw": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGlueDaemon"
-                    }
+                "username": {
+                    "type": "string",
+                    "example": "user01"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_glue.TypeGluePoolStats": {
+        "ablecloud_io_ablestack-api_internal_model_glue.Response": {
             "type": "object",
             "properties": {
-                "avail_raw": {
-                    "type": "integer"
+                "code": {
+                    "type": "integer",
+                    "example": 200
                 },
-                "bytes_used": {
-                    "type": "integer"
+                "message": {
+                    "type": "string",
+                    "example": "ok"
                 },
-                "compress_bytes_used": {
-                    "type": "integer"
+                "val": {}
+            }
+        },
+        "ablecloud_io_ablestack-api_internal_model_glue.SMBFolderDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "folder_name": {
+                    "type": "string",
+                    "example": "share02"
                 },
-                "compress_under_bytes": {
-                    "type": "integer"
+                "fs_name": {
+                    "type": "string",
+                    "example": "gluefs"
                 },
-                "data_bytes_used": {
-                    "type": "integer"
-                },
-                "dirty": {
-                    "type": "integer"
-                },
-                "kb_used": {
-                    "type": "integer"
-                },
-                "max_avail": {
-                    "type": "integer"
-                },
-                "objects": {
-                    "type": "integer"
-                },
-                "omap_bytes_used": {
-                    "type": "integer"
-                },
-                "percent_used": {
-                    "type": "number"
-                },
-                "quota_bytes": {
-                    "type": "integer"
-                },
-                "quota_objects": {
-                    "type": "integer"
-                },
-                "rd": {
-                    "type": "integer"
-                },
-                "rd_bytes": {
-                    "type": "integer"
-                },
-                "stored": {
-                    "type": "integer"
-                },
-                "stored_data": {
-                    "type": "integer"
-                },
-                "stored_omap": {
-                    "type": "integer"
-                },
-                "stored_raw": {
-                    "type": "integer"
-                },
-                "wr": {
-                    "type": "integer"
-                },
-                "wr_bytes": {
-                    "type": "integer"
+                "path": {
+                    "type": "string",
+                    "example": "/gluefs/volumes/share02"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_glue.TypeGluePools": {
+        "ablecloud_io_ablestack-api_internal_model_glue.SMBFolderRequest": {
             "type": "object",
             "properties": {
-                "id": {
-                    "type": "integer"
+                "cache_policy": {
+                    "type": "string",
+                    "enum": [
+                        "true",
+                        "false"
+                    ],
+                    "example": "true"
                 },
-                "name": {
-                    "type": "string"
+                "folder_name": {
+                    "type": "string",
+                    "example": "share02"
                 },
-                "stats": {
-                    "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_glue.TypeGluePoolStats"
+                "fs_name": {
+                    "type": "string",
+                    "example": "gluefs"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/gluefs/volumes/share02"
+                },
+                "volume_path": {
+                    "type": "string",
+                    "example": "/volumes/share02"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_glue.TypeGlueStorageStats": {
+        "ablecloud_io_ablestack-api_internal_model_glue.SMBShareRequest": {
             "type": "object",
             "properties": {
-                "num_osds": {
-                    "type": "integer"
+                "cache_policy": {
+                    "type": "string",
+                    "enum": [
+                        "true",
+                        "false"
+                    ],
+                    "example": "true"
                 },
-                "num_per_pool_omap_osds": {
-                    "type": "integer"
+                "dns": {
+                    "type": "string",
+                    "example": "10.10.10.10"
                 },
-                "num_per_pool_osds": {
-                    "type": "integer"
+                "folder_name": {
+                    "type": "string",
+                    "example": "share01"
                 },
-                "total_avail_bytes": {
-                    "type": "integer"
+                "fs_name": {
+                    "type": "string",
+                    "example": "gluefs"
                 },
-                "total_bytes": {
-                    "type": "integer"
+                "password": {
+                    "type": "string",
+                    "example": "password"
                 },
-                "total_used_bytes": {
-                    "type": "integer"
+                "path": {
+                    "type": "string",
+                    "example": "/gluefs/volumes/share01"
                 },
-                "total_used_raw_bytes": {
-                    "type": "integer"
+                "realm": {
+                    "type": "string",
+                    "example": "EXAMPLE.LOCAL"
                 },
-                "total_used_raw_ratio": {
-                    "type": "number"
+                "sec_type": {
+                    "type": "string",
+                    "enum": [
+                        "normal",
+                        "ads"
+                    ],
+                    "example": "normal"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "smbuser"
+                },
+                "volume_path": {
+                    "type": "string",
+                    "example": "/volumes/share01"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_pcs.TypePCSClone": {
+        "ablecloud_io_ablestack-api_internal_model_glue.SMBUserDeleteRequest": {
             "type": "object",
             "properties": {
-                "disabled": {
-                    "type": "string"
-                },
-                "failed": {
-                    "type": "string"
-                },
-                "failureIgnored": {
-                    "type": "string"
-                },
-                "group": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_pcs.TypePCSResourceGroup"
-                    }
-                },
-                "id": {
-                    "description": "Text           string                 ` + "`" + `xml:\",chardata\"` + "`" + `",
-                    "type": "string"
-                },
-                "maintenance": {
-                    "type": "string"
-                },
-                "managed": {
-                    "type": "string"
-                },
-                "multiState": {
-                    "type": "string"
-                },
-                "resource": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/TypePCSesource"
-                    }
-                },
-                "unique": {
-                    "type": "string"
+                "username": {
+                    "type": "string",
+                    "example": "smbuser"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_pcs.TypePCSResourceGroup": {
+        "ablecloud_io_ablestack-api_internal_model_glue.SMBUserRequest": {
             "type": "object",
             "properties": {
-                "disabled": {
-                    "type": "string"
+                "password": {
+                    "type": "string",
+                    "example": "password"
                 },
-                "id": {
-                    "description": "Text            string            ` + "`" + `xml:\",chardata\"` + "`" + `",
-                    "type": "string"
-                },
-                "maintenance": {
-                    "type": "string"
-                },
-                "managed": {
-                    "type": "string"
-                },
-                "numberResources": {
-                    "type": "string"
-                },
-                "resource": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/TypePCSesource"
-                    }
+                "username": {
+                    "type": "string",
+                    "example": "smbuser"
                 }
             }
         },
-        "ablecloud_io_ablestack-api_internal_model_pcs.TypePCSResources": {
+        "ablecloud_io_ablestack-api_internal_model_glue.ServiceControlRequest": {
             "type": "object",
             "properties": {
-                "PCSResource": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/TypePCSesource"
-                    }
+                "control": {
+                    "type": "string",
+                    "enum": [
+                        "start",
+                        "stop",
+                        "restart",
+                        "redeploy"
+                    ],
+                    "example": "restart"
                 }
             }
         },
@@ -7499,30 +10214,29 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler_auth.AuthApplyRequest": {
+        "internal_handler_auth.InternalTokenApplyRequest": {
             "type": "object",
             "properties": {
-                "token": {
+                "internal_token": {
                     "type": "string"
                 }
             }
         },
-        "internal_handler_auth.AuthSyncRequest": {
+        "internal_handler_auth.InternalTokenResult": {
             "type": "object",
             "properties": {
-                "option": {
-                    "type": "string",
-                    "enum": [
-                        "host",
-                        "scvm",
-                        "ccvm",
-                        "all"
-                    ],
-                    "example": "all"
+                "code": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
                 }
             }
         },
-        "internal_handler_auth.AuthSyncResponse": {
+        "internal_handler_auth.InternalTokenRotateResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -7535,32 +10249,12 @@ const docTemplate = `{
                 "results": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_handler_auth.AuthSyncResult"
+                        "$ref": "#/definitions/internal_handler_auth.InternalTokenResult"
                     }
                 },
                 "val": {
                     "type": "object",
                     "additionalProperties": {}
-                }
-            }
-        },
-        "internal_handler_auth.AuthSyncResult": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer"
-                },
-                "hostname": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "target": {
-                    "type": "string"
                 }
             }
         },
@@ -7613,48 +10307,30 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_service_controller.TypeNeighbor": {
-            "type": "object",
-            "properties": {
-                "hostname": {
-                    "type": "string"
-                },
-                "ip": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_service_controller.TypeNeighborInfo": {
+        "internal_handler_cube.ClusterHealthResponse": {
             "type": "object",
             "properties": {
                 "code": {
-                    "type": "integer"
+                    "description": "result code for option-based checks",
+                    "type": "integer",
+                    "example": 200
                 },
-                "info": {
-                    "type": "object",
-                    "additionalProperties": true
-                }
-            }
-        },
-        "internal_service_controller.TypeNeighborInfos": {
-            "type": "object",
-            "properties": {
-                "neighbors": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/internal_service_controller.TypeNeighborInfo"
-                    }
-                }
-            }
-        },
-        "internal_service_controller.TypeNeighbors": {
-            "type": "object",
-            "properties": {
-                "neighbors": {
+                "message": {
+                    "description": "result message for option-based checks",
+                    "type": "string",
+                    "example": "health check success"
+                },
+                "results": {
+                    "description": "per-target results",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_service_controller.TypeNeighbor"
+                        "$ref": "#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterHealthTargetResult"
                     }
+                },
+                "status": {
+                    "description": "ok status for default health",
+                    "type": "string",
+                    "example": "ok"
                 }
             }
         }

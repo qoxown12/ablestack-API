@@ -36,7 +36,7 @@ const (
 //
 //	@Summary		ABLESTACK Version Update
 //	@Description	마운트된 ABLESTACK ISO의 버전 정보를 조회하거나 update.sh를 실행합니다.
-//	@Tags			CUBE - Version
+//	@Tags			Cube-Version
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.VersionUpdateRequest	true	"version update request"

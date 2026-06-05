@@ -48,7 +48,7 @@ var (
 //
 //	@Summary		CCVM Lifecycle
 //	@Description	Cloud Center VM lifecycle 작업을 수행합니다. 사용 가능한 action: setup, reset, copy, start, stop, restart, delete. standalone setup은 로컬 CCVM을 생성하고, reset은 clusterConfig.type에 따라 PCS/GFS/local disk 설정까지 초기화합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMLifecycleRequest	true	"ccvm lifecycle request"

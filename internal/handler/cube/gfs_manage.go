@@ -72,7 +72,7 @@ type gfsManageDevicePaths struct {
 //
 //	@Summary		GFS Manage
 //	@Description	GFS/PCS 로컬 작업을 수행하거나 cluster.json hosts[].ablecube 대상 API로 fan-out 합니다. SSH는 사용하지 않습니다.
-//	@Tags			CUBE - GFS
+//	@Tags			Cube-GFS
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.GFSManageRequest	true	"gfs manage request"

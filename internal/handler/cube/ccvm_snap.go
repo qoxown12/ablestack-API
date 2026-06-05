@@ -86,7 +86,7 @@ type ccvmSnapPCSResource struct {
 //
 //	@Summary		CCVM Snapshot
 //	@Description	HCI/HCI-filesystem 환경에서 CCVM RBD snapshot list/backup/rollback 작업을 수행합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMSnapRequest	true	"ccvm snapshot request"

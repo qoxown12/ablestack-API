@@ -69,6 +69,8 @@ tar -C "$ROOT_DIR" \
   --exclude='./internal/handler/cube/create_scvm_cloudinit.go' \
   --exclude='./internal/handler/cube/create_ccvm_xml.go' \
   --exclude='./internal/handler/cube/create_scvm_xml.go' \
+  --exclude='./internal/service/controller/Neighbor.go' \
+  --exclude='./internal/service/controller/config.go' \
   -cf - . | tar -C "$SOURCE_ROOT" -xf -
 
 tar -C "$TMP_DIR" -czf "$RPMBUILD_DIR/SOURCES/${PACKAGE_NAME}-${VERSION}.tar.gz" "${PACKAGE_NAME}-${VERSION}"

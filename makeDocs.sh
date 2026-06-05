@@ -26,7 +26,7 @@ echo "$(pwd)"
 rm -f "$ROOT/docs/docs.go" "$ROOT/docs/swagger.json" "$ROOT/docs/swagger.yaml"
 
 echo swag init
-"$SWAG" init -g cmd/apiserver/main.go -o docs --parseDependency --parseInternal --exclude internal/handler/sample
+"$SWAG" init -g cmd/apiserver/main.go -o docs --parseDependency --parseInternal
 
 echo patch swagger security
 python3 "$ROOT/scripts/patch-swagger-security.py"

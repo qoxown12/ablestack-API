@@ -1467,7 +1467,7 @@ func checkAPITarget(host string) error {
 		return errors.New("empty host")
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("%s/api/v1/cube/cluster/health", buildTargetURL(host))
+	url := fmt.Sprintf("%s/api/v1/health", buildTargetURL(host))
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err

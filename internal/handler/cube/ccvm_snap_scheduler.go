@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 )
 
@@ -18,7 +19,7 @@ const (
 var autoCCVMSnapSchedulerOnce sync.Once
 
 // AutoCCVMSnapshotBackup은 API 서버 내부에서 CCVM snapshot 자동 백업 스케줄러를 시작한다.
-// controller의 10초 주기 StatusRegister에서 여러 번 호출되어도 실제 scheduler는 한 번만 실행된다.
+// controller의 주기 StatusRegister에서 여러 번 호출되어도 실제 scheduler는 한 번만 실행된다.
 func AutoCCVMSnapshotBackup() {
 	autoCCVMSnapSchedulerOnce.Do(func() {
 		go runAutoCCVMSnapScheduler()
@@ -44,12 +45,14 @@ func nextAutoCCVMSnapTime(now time.Time) time.Time {
 func triggerAutoCCVMSnapshotBackup(scheduleTime time.Time) {
 	root, err := loadClusterJSONRoot()
 	if err != nil {
+		logging.AppendJobLog("cube.AutoCCVMSnapshotBackup", "failed", "error", "failed to read cluster.json: "+err.Error(), nil)
 		log.Printf("ccvm-snap auto skip: failed to read cluster.json: %v", err)
 		return
 	}
 
 	profile, err := extractSystemProfile(root)
 	if err != nil {
+		logging.AppendJobLog("cube.AutoCCVMSnapshotBackup", "failed", "error", "failed to read systemProfile: "+err.Error(), nil)
 		log.Printf("ccvm-snap auto skip: failed to read systemProfile: %v", err)
 		return
 	}
@@ -66,6 +69,7 @@ func triggerAutoCCVMSnapshotBackup(scheduleTime time.Time) {
 
 	cfg, err := loadClusterConfigSection()
 	if err != nil {
+		logging.AppendJobLog("cube.AutoCCVMSnapshotBackup", "failed", "error", "failed to load clusterConfig: "+err.Error(), nil)
 		log.Printf("ccvm-snap auto skip: failed to load clusterConfig: %v", err)
 		return
 	}
@@ -79,9 +83,18 @@ func triggerAutoCCVMSnapshotBackup(scheduleTime time.Time) {
 		SnapName: snapName,
 	})
 	if resp.Code != http.StatusOK {
+		logging.AppendJobLog("cube.AutoCCVMSnapshotBackup", "backup_failed", "error", resp.Message, map[string]any{
+			"snap_name": snapName,
+			"code":      resp.Code,
+			"target":    resp.Target,
+		})
 		log.Printf("ccvm-snap auto failed: snap=%s code=%d message=%s", snapName, resp.Code, resp.Message)
 		return
 	}
+	logging.AppendJobLog("cube.AutoCCVMSnapshotBackup", "backup_success", "success", "snapshot backup completed", map[string]any{
+		"snap_name": snapName,
+		"target":    resp.Target,
+	})
 	log.Printf("ccvm-snap auto success: snap=%s target=%s", snapName, resp.Target)
 }
 

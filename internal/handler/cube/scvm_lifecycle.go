@@ -37,7 +37,7 @@ const (
 //
 //	@Summary		SCVM Lifecycle
 //	@Description	Storage Center VM lifecycle 작업을 수행합니다. 사용 가능한 action: setup, reset, start, stop, delete, resource. resource action은 cpu 또는 memory 값을 함께 전달합니다.
-//	@Tags			CUBE - SCVM
+//	@Tags			Cube-SCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.SCVMUpdateRequest	true	"scvm lifecycle request"

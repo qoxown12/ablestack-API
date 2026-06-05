@@ -42,7 +42,7 @@ const (
 //
 //	@Summary		CCVM Secondary Resize
 //	@Description	CCVM secondary 용량을 추가합니다. SSH 대신 qemu-guest-agent를 사용하며, PCS 제어는 pcs.go helper를 사용합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMSecondaryResizeRequest	true	"ccvm secondary resize request"

@@ -49,7 +49,7 @@ type scvmXMLPCIDevice struct {
 //
 //	@Summary		Create SCVM XML
 //	@Description	Storage Center VM XML과 hugepage 설정을 생성합니다.
-//	@Tags			CUBE - SCVM
+//	@Tags			Cube-SCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.SCVMXMLCreateRequest	true	"scvm xml create request"
@@ -101,8 +101,13 @@ func normalizeSCVMXMLCreateRequest(req *SCVMXMLCreateRequest) error {
 		if len(req.LunPassthroughList) == 0 {
 			return fmt.Errorf("lun_passthrough_list required")
 		}
+	case "disk_passthrough":
+		req.DiskPassthroughList = trimStringList(req.DiskPassthroughList)
+		if len(req.DiskPassthroughList) == 0 {
+			return fmt.Errorf("disk_passthrough_list required")
+		}
 	default:
-		return fmt.Errorf("disk_type must be raid_passthrough or lun_passthrough")
+		return fmt.Errorf("disk_type must be raid_passthrough, lun_passthrough or disk_passthrough")
 	}
 
 	req.ManagementNetworkBridge = strings.TrimSpace(req.ManagementNetworkBridge)
@@ -202,12 +207,16 @@ func renderSCVMXMLTemplate(template string, req SCVMXMLCreateRequest, activeOpen
 		case strings.Contains(line, "<!--scvm_cloudinit-->"):
 			line = strings.ReplaceAll(line, "<!--scvm_cloudinit-->", scvmXMLCloudInitDisk())
 		case strings.Contains(line, "<!--lun_passthrough-->"):
-			if req.DiskType != "lun_passthrough" {
+			if req.DiskType != "lun_passthrough" && req.DiskType != "disk_passthrough" {
 				line = ""
 				break
 			}
 			var block string
-			block, err = scvmXMLLUNPassthrough(req.LunPassthroughList)
+			if req.DiskType == "disk_passthrough" {
+				block, err = scvmXMLBlockPassthrough(req.DiskPassthroughList, "disk", "disk_passthrough_list")
+			} else {
+				block, err = scvmXMLBlockPassthrough(req.LunPassthroughList, "lun", "lun_passthrough_list")
+			}
 			line = strings.ReplaceAll(line, "<!--lun_passthrough-->", block)
 		case strings.Contains(line, "<!--management_network_bridge-->"):
 			block := scvmXMLBridgeInterface(req.ManagementNetworkBridge, bridgeNum, slots, activeOpenVSwitch, true)
@@ -268,18 +277,18 @@ func scvmXMLCloudInitDisk() string {
 	}, "\n")
 }
 
-func scvmXMLLUNPassthrough(luns []string) (string, error) {
-	if len(luns) > 26 {
-		return "", fmt.Errorf("lun_passthrough_list supports up to 26 values")
+func scvmXMLBlockPassthrough(devices []string, deviceType string, fieldName string) (string, error) {
+	if len(devices) > 26 {
+		return "", fmt.Errorf("%s supports up to 26 values", fieldName)
 	}
-	blocks := make([]string, 0, len(luns))
-	for i, lun := range luns {
+	blocks := make([]string, 0, len(devices))
+	for i, device := range devices {
 		dev := fmt.Sprintf("sd%c", 'a'+rune(i))
 		unit := strconv.Itoa(i)
 		blocks = append(blocks, strings.Join([]string{
-			"    <disk type='block' device='lun'>",
+			"    <disk type='block' device='" + xmlAttr(deviceType) + "'>",
 			"      <driver name='qemu' type='raw'/>",
-			"      <source dev='" + xmlAttr(lun) + "'/>",
+			"      <source dev='" + xmlAttr(device) + "'/>",
 			"      <target dev='" + dev + "' bus='scsi'/>",
 			"      <alias name='scsi0-0-0-" + unit + "'/>",
 			"      <address type='drive' controller='0' bus='0' target='0' unit='" + unit + "'/>",

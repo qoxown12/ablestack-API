@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"github.com/gin-gonic/gin"
@@ -76,7 +77,7 @@ type ccvmBackupFileInfo struct {
 //
 //	@Summary		CCVM File Backup
 //	@Description	virsh backup-begin 기반 CCVM 파일 백업/상태/목록/스케줄 관리를 수행합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMBackupRequest	true	"ccvm backup request"
@@ -129,7 +130,7 @@ func CCVMBackup(context *gin.Context) {
 //
 //	@Summary		CCVM File Restore
 //	@Description	CCVM 파일 백업으로 디스크를 복구합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMRestoreRequest	true	"ccvm restore request"
@@ -828,8 +829,10 @@ func runAutoCCVMBackupScheduler() {
 }
 
 func triggerAutoCCVMBackupSchedule(now time.Time) {
+	job := "cube.AutoCCVMFileBackupSchedule"
 	cfg, err := loadClusterConfigSection()
 	if err != nil {
+		logging.RecordJobResult(job, err, nil)
 		return
 	}
 	if !isCCVMBackupScheduleOwner(cfg) {
@@ -837,10 +840,12 @@ func triggerAutoCCVMBackupSchedule(now time.Time) {
 	}
 	targetDir, err := resolveCCVMBackupTargetDir(cfg, "")
 	if err != nil {
+		logging.RecordJobResult(job, err, nil)
 		return
 	}
 	config, err := loadCCVMBackupConfig(targetDir)
 	if err != nil {
+		logging.RecordJobResult(job, err, map[string]any{"target_dir": targetDir})
 		return
 	}
 
@@ -857,6 +862,19 @@ func triggerAutoCCVMBackupSchedule(now time.Time) {
 		}
 		if resp.Code != 200 {
 			config.Backup.LastRunKey = ""
+			logging.AppendJobLog(job, "backup_failed", "error", resp.Message, map[string]any{
+				"code":       resp.Code,
+				"target":     resp.Target,
+				"target_dir": targetDir,
+				"run_key":    key,
+			})
+		} else {
+			logging.AppendJobLog(job, "backup_success", "success", "file backup completed", map[string]any{
+				"target":     resp.Target,
+				"target_dir": targetDir,
+				"run_key":    key,
+				"val":        fmt.Sprint(resp.Val),
+			})
 		}
 	}
 	if due, key := isCCVMBackupScheduleDue(config.Delete, now); due {
@@ -864,11 +882,26 @@ func triggerAutoCCVMBackupSchedule(now time.Time) {
 		changed = true
 		if err := deleteExpiredCCVMBackups(targetDir, config.Delete.RetentionMonths); err != nil {
 			config.Delete.LastRunKey = ""
+			logging.AppendJobLog(job, "cleanup_failed", "error", err.Error(), map[string]any{
+				"target_dir":         targetDir,
+				"retention_months":   config.Delete.RetentionMonths,
+				"run_key":            key,
+				"delete_schedule_on": true,
+			})
+		} else {
+			logging.AppendJobLog(job, "cleanup_success", "success", "expired file backups cleaned", map[string]any{
+				"target_dir":       targetDir,
+				"retention_months": config.Delete.RetentionMonths,
+				"run_key":          key,
+			})
 		}
 	}
 	if changed {
-		_ = saveCCVMBackupConfig(targetDir, config)
+		err := saveCCVMBackupConfig(targetDir, config)
+		logging.RecordJobResult(job, err, map[string]any{"target_dir": targetDir})
+		return
 	}
+	logging.RecordJobResult(job, nil, map[string]any{"target_dir": targetDir})
 }
 
 func isCCVMBackupScheduleOwner(cfg *CubeModel.ClusterConfigSection) bool {
