@@ -245,7 +245,7 @@ Content-Type: application/json
     "dns": "8.8.8.8"
   },
   "external_timeserver": "time.google.com",
-  "iscsi_storage": "false",
+  "storage_network": "false",
   "pcs_cluster_list": ["10.10.12.1", "10.10.12.2", "10.10.12.3"],
   "hosts": [
     {
@@ -300,7 +300,7 @@ Content-Type: application/json
     "dns": "8.8.8.8"
   },
   "external_timeserver": "time.google.com",
-  "iscsi_storage": "false",
+  "storage_network": "false",
   "pcs_cluster_list": ["10.10.31.1"],
   "hosts": [
     {
@@ -331,7 +331,7 @@ Content-Type: application/json
     "dns": "8.8.8.8"
   },
   "external_timeserver": "time.google.com",
-  "iscsi_storage": "false",
+  "storage_network": "false",
   "hosts": [
     {
       "index": "1",

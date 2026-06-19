@@ -362,17 +362,17 @@ func callHealthTarget(client *http.Client, target string) error {
 // GetClusterConfig godoc
 //
 //	@Summary		Show Cluster Config
-//	@Description	cluster.json의 clusterConfig만 반환합니다.
+//	@Description	cluster.json 다운로드에 필요한 clusterConfig와 security를 반환합니다. systemProfile은 제외합니다.
 //	@Tags			Cube-Cluster
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
-//	@Success		200	{object}	CubeModel.ClusterConfigSection
+//	@Success		200	{object}	CubeModel.ClusterConfigResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		404	{object}	HTTP404NotFound
 //	@Failure		500	{object}	HTTP500InternalServerError
 //	@Router			/cube/cluster/config [get]
 func GetClusterConfig(context *gin.Context) {
-	cfg, err := loadClusterConfigSection()
+	root, err := loadClusterJSONRoot()
 	if err != nil {
 		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
 			ErrCode: http.StatusInternalServerError,
@@ -380,7 +380,65 @@ func GetClusterConfig(context *gin.Context) {
 		})
 		return
 	}
-	context.IndentedJSON(http.StatusOK, cfg)
+
+	resp, err := buildClusterConfigResponse(root)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
+			ErrCode: http.StatusInternalServerError,
+			Message: err.Error(),
+		})
+		return
+	}
+	context.IndentedJSON(http.StatusOK, resp)
+}
+
+func buildClusterConfigResponse(root map[string]any) (CubeModel.ClusterConfigResponse, error) {
+	ensuredToken := ""
+	if strings.TrimSpace(clusterConfigRootInternalToken(root)) == "" {
+		token, _, err := security.EnsureInternalToken()
+		if err != nil {
+			return CubeModel.ClusterConfigResponse{}, err
+		}
+		ensuredToken = strings.TrimSpace(token)
+		if refreshed, err := loadClusterJSONRoot(); err == nil {
+			root = refreshed
+		}
+	}
+
+	normalized := clusterconfig.NormalizeClusterJSON(root)
+	if ensuredToken != "" && strings.TrimSpace(clusterConfigRootInternalToken(normalized)) == "" {
+		securityMap := ensureMap(normalized, "security")
+		securityMap["internal_token"] = ensuredToken
+	}
+
+	rawConfig, err := json.Marshal(normalized["clusterConfig"])
+	if err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+	rawSecurity, err := json.Marshal(normalized["security"])
+	if err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+
+	var resp CubeModel.ClusterConfigResponse
+	if err := json.Unmarshal(rawConfig, &resp.ClusterConfig); err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+	if err := json.Unmarshal(rawSecurity, &resp.Security); err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+	return resp, nil
+}
+
+func clusterConfigRootInternalToken(root map[string]any) string {
+	if root == nil {
+		return ""
+	}
+	securityMap, ok := root["security"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(securityMap["internal_token"]))
 }
 
 // ApplyClusterConfig godoc
@@ -390,7 +448,7 @@ func GetClusterConfig(context *gin.Context) {
 //	@Tags			Cube-Cluster
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","iscsi_storage":""})
+//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","storage_network":""})
 //	@Success		200	{object}	CubeModel.ClusterApplyResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		404	{object}	HTTP404NotFound
@@ -532,6 +590,12 @@ func ensureClusterInternalToken(req *ClusterConfigApplyRequest) error {
 	if req == nil || !isInsertAction(req.Action) {
 		return nil
 	}
+	if req.Security != nil {
+		if token := strings.TrimSpace(req.Security.InternalToken); token != "" {
+			req.Security.InternalToken = token
+			return security.SetInternalToken(token)
+		}
+	}
 	token, _, err := security.EnsureInternalToken()
 	if err != nil {
 		return err
@@ -554,7 +618,7 @@ func ensureClusterInternalToken(req *ClusterConfigApplyRequest) error {
 //	@Tags			Cube-Cluster
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","iscsi_storage":""})
+//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","storage_network":""})
 //	@Success		200	{object}	CubeModel.ClusterApplyLocalResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		404	{object}	HTTP404NotFound
@@ -609,6 +673,13 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
 			ErrCode: http.StatusInternalServerError,
 			Message: "failed to read cluster.json",
+		})
+		return
+	}
+	if err := ensureClusterInternalToken(&req); err != nil {
+		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
+			ErrCode: http.StatusInternalServerError,
+			Message: err.Error(),
 		})
 		return
 	}
@@ -1076,8 +1147,8 @@ func requireInsertFields(req ClusterConfigApplyRequest) error {
 	if req.CCVM == nil || strings.TrimSpace(req.CCVM.IP) == "" {
 		return fmt.Errorf("ccvm required")
 	}
-	if strings.TrimSpace(req.IscsiStorage) == "" {
-		return fmt.Errorf("iscsi_storage required")
+	if strings.TrimSpace(req.StorageNetwork) == "" {
+		return fmt.Errorf("storage_network required")
 	}
 	return nil
 }

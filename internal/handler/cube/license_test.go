@@ -21,7 +21,7 @@ func TestSyncLicenseSystemProfileWritesOEMAsLicenseType(t *testing.T) {
 			"pcsCluster": {},
 			"hosts": [],
 			"external_timeserver": "",
-			"iscsi_storage": ""
+			"storage_network": ""
 		},
 		"systemProfile": {
 			"bootstrap": {

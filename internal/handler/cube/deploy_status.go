@@ -164,8 +164,9 @@ func initialDeployStatusRaw(cfg *CubeModel.ClusterConfigSection, profile CubeMod
 }
 
 func evaluateHCIDeployStatus(data DeployStatusData, cfg *CubeModel.ClusterConfigSection, requiresSharedFile bool) DeployStatusData {
+	data.Raw.SCVMStatus = collectDeploySCVMStatus(cfg)
+
 	if !deployFlagTrue(data.Raw.SCVMBootstrapStatus) {
-		data.Raw.SCVMStatus = collectDeploySCVMStatus(cfg)
 		if !isDeployVMRunning(data.Raw.SCVMStatus) {
 			return withDeployStage(data, CubeModel.DeployStageStorageVMDeploy, "storage_vm_not_deployed", CubeModel.DeployActionDownloadConfigFile, CubeModel.DeployActionPrepareCluster, CubeModel.DeployActionDeployStorageVM)
 		}
@@ -183,8 +184,9 @@ func evaluateHCIDeployStatus(data DeployStatusData, cfg *CubeModel.ClusterConfig
 		}
 	}
 
+	data.Raw.CCVMStatus = collectDeployCCVMStatus(cfg)
+
 	if !deployFlagTrue(data.Raw.CCVMBootstrapStatus) {
-		data.Raw.CCVMStatus = collectDeployCCVMStatus(cfg)
 		if !isDeployVMRunning(data.Raw.CCVMStatus) {
 			return withDeployStage(data, CubeModel.DeployStageCloudVMDeploy, "cloud_vm_not_deployed", CubeModel.DeployActionDownloadConfigFile, CubeModel.DeployActionOpenStorageCenter, CubeModel.DeployActionDeployCloudVM)
 		}
@@ -210,9 +212,7 @@ func evaluateVMDeployStatus(data DeployStatusData, cfg *CubeModel.ClusterConfigS
 		return withDeployStage(data, CubeModel.DeployStageGFSStorage, "gfs_storage_not_configured", CubeModel.DeployActionDownloadConfigFile, CubeModel.DeployActionConfigureGFS)
 	}
 
-	if !deployFlagTrue(data.Raw.CCVMBootstrapStatus) {
-		data.Raw.CCVMStatus = collectDeployCCVMStatus(cfg)
-	}
+	data.Raw.CCVMStatus = collectDeployCCVMStatus(cfg)
 
 	if !deployFlagTrue(data.Raw.WallMonitoringStatus) {
 		data.Raw.CloudClusterStatus = collectDeployCloudClusterStatus(cfg)
@@ -243,8 +243,9 @@ func evaluateStandaloneDeployStatus(data DeployStatusData, cfg *CubeModel.Cluste
 		return withDeployStage(data, CubeModel.DeployStageLocalStorage, "local_storage_not_configured", CubeModel.DeployActionDownloadConfigFile, CubeModel.DeployActionConfigureLocal)
 	}
 
+	data.Raw.CCVMStatus = collectDeployCCVMStatus(cfg)
+
 	if !deployFlagTrue(data.Raw.CCVMBootstrapStatus) {
-		data.Raw.CCVMStatus = collectDeployCCVMStatus(cfg)
 		if !isDeployVMRunning(data.Raw.CCVMStatus) {
 			return withDeployStage(data, CubeModel.DeployStageCloudVMDeploy, "cloud_vm_not_deployed", CubeModel.DeployActionDownloadConfigFile, CubeModel.DeployActionDeployCloudVM)
 		}

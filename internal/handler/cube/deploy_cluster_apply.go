@@ -1,8 +1,6 @@
 package cube
 
-import (
-	"net/http"
-)
+import "net/http"
 
 func runClusterConfigApplyForDeploy(req ClusterConfigApplyRequest) ClusterConfigApplyResponse {
 	if err := req.Normalize(); err != nil {

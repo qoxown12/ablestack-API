@@ -193,6 +193,105 @@ definitions:
       XMIT_HASH_POLICY:
         type: string
     type: object
+  ablecloud_io_ablestack-api_internal_model_cube.BootstrapHealthResult:
+    properties:
+      attempts:
+        example: 2
+        type: integer
+      code:
+        example: 200
+        type: integer
+      hostname:
+        example: scvm1
+        type: string
+      message:
+        example: ok
+        type: string
+      role:
+        example: scvm
+        type: string
+      target:
+        example: 10.10.31.11
+        type: string
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.BootstrapRequest:
+    properties:
+      license_content:
+        description: 라이선스 파일 내용(base64). 비어 있으면 현재 로컬 라이선스를 재사용한다.
+        example: BASE64_CONTENT
+        type: string
+      license_filename:
+        description: 대상 노드에 저장할 라이선스 파일 이름.
+        example: license.lic
+        type: string
+      licenses:
+        additionalProperties:
+          type: string
+        description: hostname, role, target IP, index, scvmN 이름별 라이선스 내용.
+        type: object
+      run_script:
+        description: VM API health/license 단계 전에 host qemu-guest-agent로 /root/bootstrap.sh를
+          실행할지 여부.
+        example: true
+        type: boolean
+      target_hostnames:
+        description: cluster.json hosts[].hostname 기준 명시 대상. ccvm은 "ccvm"으로 선택할 수
+          있다.
+        example:
+        - scvm1
+        - scvm2
+        items:
+          type: string
+        type: array
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.BootstrapResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      health:
+        items:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.BootstrapHealthResult'
+        type: array
+      license_apply:
+        $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyResponse'
+      license_status:
+        $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.LicenseApplyResponse'
+      message:
+        example: scvm_bootstrap success
+        type: string
+      role:
+        example: scvm
+        type: string
+      script:
+        items:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.BootstrapScriptResult'
+        type: array
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.BootstrapScriptResult:
+    properties:
+      code:
+        example: 200
+        type: integer
+      domain:
+        example: scvm
+        type: string
+      hostname:
+        example: scvm1
+        type: string
+      message:
+        example: ok
+        type: string
+      output:
+        example: bootstrap log tail
+        type: string
+      role:
+        example: scvm
+        type: string
+      target:
+        example: 10.10.31.1
+        type: string
+    type: object
   ablecloud_io_ablestack-api_internal_model_cube.CCVMBackupRequest:
     properties:
       action:
@@ -704,10 +803,6 @@ definitions:
         items:
           $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterHost'
         type: array
-      iscsi_storage:
-        description: iscsi storage usage (true/false)
-        example: "false"
-        type: string
       mngtNic:
         allOf:
         - $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterMngtNicConfig'
@@ -732,6 +827,10 @@ definitions:
       remove_hostname:
         description: remove hostname
         example: ablecube31-3
+        type: string
+      storage_network:
+        description: storage network usage (true/false)
+        example: "false"
         type: string
       type:
         description: cluster type (e.g. ablestack-vm, ablestack-hci)
@@ -793,6 +892,17 @@ definitions:
         example: 10.10.31.10
         type: string
     type: object
+  ablecloud_io_ablestack-api_internal_model_cube.ClusterConfigResponse:
+    properties:
+      clusterConfig:
+        allOf:
+        - $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterConfigSection'
+        description: cluster configuration data
+      security:
+        allOf:
+        - $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterSecurityConfig'
+        description: internal API security config
+    type: object
   ablecloud_io_ablestack-api_internal_model_cube.ClusterConfigSection:
     properties:
       backup_path:
@@ -812,10 +922,6 @@ definitions:
         items:
           $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterHost'
         type: array
-      iscsi_storage:
-        description: iscsi storage usage
-        example: "false"
-        type: string
       mngtNic:
         allOf:
         - $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterMngtNicConfig'
@@ -824,6 +930,10 @@ definitions:
         allOf:
         - $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterPCSClusterConfig'
         description: pcs cluster IPs
+      storage_network:
+        description: storage network usage
+        example: "false"
+        type: string
       type:
         description: cluster type
         example: ablestack-vm
@@ -936,6 +1046,12 @@ definitions:
       hostname3:
         description: 'pcs cluster node #3'
         example: 10.10.31.3
+        type: string
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.ClusterSecurityConfig:
+    properties:
+      internal_token:
+        description: internal token for API server fan-out calls
         type: string
     type: object
   ablecloud_io_ablestack-api_internal_model_cube.ClusterSecurityPatchConfig:
@@ -1124,6 +1240,11 @@ definitions:
         items:
           type: string
         type: array
+      run_bootstrap_script:
+        description: scvm_bootstrap/ccvm_bootstrap 단계에서 VM 내부 /root/bootstrap.sh를
+          실행할지 여부. 기본값은 true.
+        example: true
+        type: boolean
       scvm_by_host:
         additionalProperties:
           $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.SCVMXMLCreateRequest'
@@ -1765,6 +1886,86 @@ definitions:
         type: string
       val: {}
     type: object
+  ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncRequest:
+    properties:
+      action:
+        description: 'action: sync/rescan'
+        example: sync
+        type: string
+      target_hostnames:
+        description: explicit target hostnames from cluster.json hosts[].hostname.
+        example:
+        - ablecube31-1
+        - ablecube31-2
+        items:
+          type: string
+        type: array
+      targets:
+        description: explicit target IPs. If empty, clusterConfig.hosts[].ablecube
+          is used.
+        example:
+        - 10.10.31.1
+        - 10.10.31.2
+        items:
+          type: string
+        type: array
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncResponse:
+    properties:
+      action:
+        example: sync
+        type: string
+      code:
+        example: 200
+        type: integer
+      message:
+        example: ok
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncTargetResult'
+        type: array
+      steps:
+        items:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncStepResult'
+        type: array
+      target:
+        example: fanout
+        type: string
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncStepResult:
+    properties:
+      message:
+        example: ok
+        type: string
+      name:
+        example: rescan_scsi
+        type: string
+      output:
+        type: string
+      status:
+        example: succeeded
+        type: string
+    type: object
+  ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncTargetResult:
+    properties:
+      code:
+        example: 200
+        type: integer
+      hostname:
+        example: ablecube31-1
+        type: string
+      message:
+        example: ok
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncStepResult'
+        type: array
+      target:
+        example: 10.10.31.1
+        type: string
+    type: object
   ablecloud_io_ablestack-api_internal_model_cube.NICAddress:
     properties:
       ADDRESS:
@@ -2278,6 +2479,10 @@ definitions:
       mount_path:
         description: mounted ABLESTACK ISO path
         example: /mnt/ablestack-iso
+        type: string
+      update_type:
+        description: 'update type: all/mold'
+        example: all
         type: string
     type: object
   ablecloud_io_ablestack-api_internal_model_cube.VersionUpdateResponse:
@@ -3180,6 +3385,37 @@ paths:
       summary: CCVM File Backup
       tags:
       - Cube-CCVM
+  /cube/ccvm/bootstrap:
+    post:
+      consumes:
+      - application/json
+      description: CCVM의 /root/bootstrap.sh를 host qemu-guest-agent로 실행한 뒤 CCVM API
+        health 확인, 라이선스 등록/status 확인을 수행합니다. deploy_run의 ccvm_bootstrap step도 같은 실행
+        흐름을 사용합니다.
+      parameters:
+      - description: ccvm bootstrap request
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.BootstrapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.BootstrapResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/HTTP400BadRequest'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/HTTP500InternalServerError'
+      summary: CCVM Bootstrap
+      tags:
+      - Cube-CCVM
   /cube/ccvm/edit:
     post:
       consumes:
@@ -3574,14 +3810,15 @@ paths:
     get:
       consumes:
       - application/x-www-form-urlencoded
-      description: cluster.json의 clusterConfig만 반환합니다.
+      description: cluster.json 다운로드에 필요한 clusterConfig와 security를 반환합니다. systemProfile은
+        제외합니다.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterConfigSection'
+            $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.ClusterConfigResponse'
         "400":
           description: Bad Request
           schema:
@@ -4100,6 +4337,36 @@ paths:
       summary: Local Disk Manage
       tags:
       - Cube-Local
+  /cube/multipath/sync:
+    post:
+      consumes:
+      - application/json
+      description: cluster.json hosts[].ablecube 대상 API를 호출해 SCSI rescan 또는 multipath
+        bindings/wwids 동기화를 수행합니다. SSH/SCP는 사용하지 않습니다.
+      parameters:
+      - description: multipath sync request
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.MultipathSyncResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/HTTP400BadRequest'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/HTTP500InternalServerError'
+      summary: Multipath Sync
+      tags:
+      - Cube-Multipath
   /cube/nics:
     get:
       consumes:
@@ -4198,6 +4465,37 @@ paths:
       summary: RBD Manage
       tags:
       - Cube-RBD
+  /cube/scvm/bootstrap:
+    post:
+      consumes:
+      - application/json
+      description: 대표 SCVM의 /root/bootstrap.sh를 host qemu-guest-agent로 실행한 뒤 SCVM
+        API health 확인, 라이선스 등록/status 확인을 수행합니다. deploy_run의 scvm_bootstrap step도
+        같은 실행 흐름을 사용합니다.
+      parameters:
+      - description: scvm bootstrap request
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.BootstrapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ablecloud_io_ablestack-api_internal_model_cube.BootstrapResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/HTTP400BadRequest'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/HTTP500InternalServerError'
+      summary: SCVM Bootstrap
+      tags:
+      - Cube-SCVM
   /cube/scvm/lifecycle:
     post:
       consumes:
@@ -4425,7 +4723,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: 마운트된 ABLESTACK ISO의 버전 정보를 조회하거나 update.sh를 실행합니다.
+      description: 마운트된 ABLESTACK ISO의 버전 정보를 조회하거나 /opt/ABLESTACK_UPDATE로 복사한 뒤 update-all.sh/update-mold.sh를
+        실행합니다.
       parameters:
       - description: version update request
         in: body
@@ -7087,7 +7386,7 @@ paths:
             $ref: '#/definitions/HTTP500InternalServerError'
       summary: Show Versions of CUBE
       tags:
-      - CubeModel
+      - Cube-Version
 schemes:
 - http
 - https

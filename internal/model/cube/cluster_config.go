@@ -82,6 +82,10 @@ func (r *ClusterApplyRequest) Normalize() error {
 		r.ExternalTimeserver = r.DeprecatedExtenalTimeserver
 		r.DeprecatedExtenalTimeserver = ""
 	}
+	if r.StorageNetwork == "" && r.DeprecatedIscsiStorage != "" {
+		r.StorageNetwork = r.DeprecatedIscsiStorage
+		r.DeprecatedIscsiStorage = ""
+	}
 	if r.CCVM != nil {
 		if r.CCVMMngtIP == "" {
 			r.CCVMMngtIP = r.CCVM.IP
@@ -159,8 +163,10 @@ type ClusterApplyRequest struct {
 	ExternalTimeserver string `json:"external_timeserver" example:"time.google.com"`
 	// external timeserver (deprecated typo)
 	DeprecatedExtenalTimeserver string `json:"extenal_timeserver,omitempty" swaggerignore:"true"`
-	// iscsi storage usage (true/false)
-	IscsiStorage string `json:"iscsi_storage" example:"false"`
+	// storage network usage (true/false)
+	StorageNetwork string `json:"storage_network" example:"false"`
+	// storage network usage (deprecated: use storage_network)
+	DeprecatedIscsiStorage string `json:"iscsi_storage,omitempty" swaggerignore:"true"`
 	// hosts list (preferred)
 	Hosts []ClusterHost `json:"hosts"`
 	// existing hostnames from cluster.json (internal)
@@ -242,8 +248,8 @@ type ClusterHealthResponse struct {
 type ClusterConfigResponse struct {
 	// cluster configuration data
 	ClusterConfig ClusterConfigSection `json:"clusterConfig"`
-	// system profile data
-	SystemProfile ClusterSystemProfile `json:"systemProfile"`
+	// internal API security config
+	Security ClusterSecurityConfig `json:"security"`
 }
 
 // ClusterConfigSection describes the clusterConfig block.
@@ -263,8 +269,24 @@ type ClusterConfigSection struct {
 	Hosts []ClusterHost `json:"hosts"`
 	// external timeserver
 	ExternalTimeserver string `json:"external_timeserver" example:"time.google.com"`
-	// iscsi storage usage
-	IscsiStorage string `json:"iscsi_storage" example:"false"`
+	// storage network usage
+	StorageNetwork string `json:"storage_network" example:"false"`
+	// storage network usage (deprecated: use storage_network)
+	DeprecatedIscsiStorage string `json:"iscsi_storage,omitempty" swaggerignore:"true"`
+}
+
+func (c *ClusterConfigSection) UnmarshalJSON(data []byte) error {
+	type alias ClusterConfigSection
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*c = ClusterConfigSection(raw)
+	if c.StorageNetwork == "" && c.DeprecatedIscsiStorage != "" {
+		c.StorageNetwork = c.DeprecatedIscsiStorage
+	}
+	c.DeprecatedIscsiStorage = ""
+	return nil
 }
 
 // ClusterCCVMConfig describes ccvm network info.

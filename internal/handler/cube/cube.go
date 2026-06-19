@@ -29,7 +29,7 @@ const (
 //
 //	@Summary		Show Versions of CUBE
 //	@Description	OS, Kernel, Cockpit, Mold, ABLESTACK 패키지, Glue 버전을 보여줍니다. Glue 버전은 ablestack-hci/ablestack-hci-filesystem에서만 포함합니다.
-//	@Tags			CubeModel
+//	@Tags			Cube-Version
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	utils.TypeVersion

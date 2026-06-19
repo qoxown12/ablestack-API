@@ -2,7 +2,36 @@
 
 ABLESTACK API의 변경 이력은 이 파일에 기록한다. RPM 버전은 `VERSION` 파일을 기준으로 관리한다.
 
-## [0.1.3] - 2026-06-04
+## [0.1.4] - 2026-06-08
+
+### Added
+
+- SCVM/CCVM bootstrap을 단독 실행할 수 있도록 `/cube/scvm/bootstrap`, `/cube/ccvm/bootstrap` API를 추가했다. 각 API는 host qemu-guest-agent로 VM 내부 `/root/bootstrap.sh`를 실행한 뒤 VM API health와 라이선스 후처리를 수행한다.
+- 기존 `multipath_sync.sh` 흐름을 대체할 수 있도록 SSH/SCP 없이 host API fan-out으로 SCSI rescan과 multipath bindings/wwids 동기화를 수행하는 `/cube/multipath/sync` API를 추가했다.
+- `/cube/version/update`에 `update_type=all,mold`를 추가해 전체 업데이트(`update-all.sh`)와 Mold 업데이트(`update-mold.sh`)를 선택 실행할 수 있도록 했다.
+
+### Changed
+
+- SCVM Swagger `doc.json`은 Glue 중심 화면이 되도록 Cube 운영/내부 통신 API path/tag를 숨기고, 인증, health, version, license 계열 API만 남기도록 변경했다.
+- SCVM Swagger tag 순서를 Glue 계열이 먼저 보이도록 재정렬했다.
+- Swagger 문서 필터링 후 사용하지 않는 model definition을 제거해 host/CCVM과 SCVM Swagger 화면에 역할과 무관한 schema가 남지 않도록 정리했다.
+- `/cube/deploy/run`의 `scvm_bootstrap`, `ccvm_bootstrap` step이 별도 bootstrap API와 같은 실행 함수를 사용하도록 정리했다.
+- SCVM bootstrap 스크립트는 Ceph bootstrap 중복 실행을 피하기 위해 대표 SCVM 1대에서만 실행하고, 라이선스 등록/status 확인은 전체 SCVM 대상으로 유지하도록 변경했다.
+- bootstrap 스크립트 실행 후 라이선스 후처리만 재시도할 수 있도록 직접 bootstrap API에는 `run_script`, `/cube/deploy/run`에는 `run_bootstrap_script` 옵션을 추가했다.
+- `/cube/version/update`는 ISO 마운트 경로를 직접 실행하지 않고 `/opt/ABLESTACK_UPDATE`로 복사한 뒤 작업 디렉터리에서 스크립트를 실행하도록 변경했다.
+- `/cube/version/update`의 `info` 응답에 현재/대상 OS 버전과 Mold 버전을 포함하고, 대상 Mold 버전은 `AppStream/Packages/mold` RPM 파일명에서 버전명과 날짜까지만 우선 추출하도록 변경했다.
+- `/cube/version/update`의 `run`은 `/cube/deploy/status`가 `stage=ready`인 경우에만 실행되도록 서버 측 조건을 추가했다.
+- `/cube/gfs/disk/status`의 `blockdevices[]`에 `df -hP` 기준 `used`, `avail`, `use_percent`를 mountpoint별로 추가했다.
+- `cluster apply` insert 흐름에서 요청 body의 `security.internal_token`이 있으면 그 값을 사용하고, 없으면 기존 token을 보장하거나 새로 생성해 apply-local payload로 전파하도록 정리했다.
+- `/cube/cluster/config` 응답이 다운로드용 cluster.json에 필요한 `clusterConfig`와 `security`를 함께 반환하고 `systemProfile`은 제외하도록 변경했다.
+- `clusterConfig.iscsi_storage` 필드명을 `storage_network`로 변경하고, 기존 `iscsi_storage` 입력은 호환용으로 `storage_network`로 정규화하도록 했다.
+
+### Fixed
+
+- `/cube/deploy/status`에서 SCVM/CCVM bootstrap flag가 이미 true인 경우에도 VM running 상태를 raw 응답에 계속 반환하도록 수정했다.
+- `/cube/gfs/disk/status`가 `/mnt/glue-gfs`, `/mnt/glue-gfs-1`처럼 여러 GFS mountpoint가 있는 환경에서 각 mountpoint의 사용량을 개별 매칭하도록 보완했다.
+
+## [0.1.3] - 2026-06-05
 
 ### Added
 

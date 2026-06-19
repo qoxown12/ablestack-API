@@ -120,7 +120,7 @@ func buildPCSExecutionTargets(cfg *CubeModel.ClusterConfigSection) []pcsExecutio
 func ccvmHostAPITarget(cfg *CubeModel.ClusterConfigSection, host CubeModel.ClusterHost) string {
 	if cfg != nil &&
 		strings.EqualFold(strings.TrimSpace(cfg.Type), "ablestack-vm") &&
-		strings.EqualFold(strings.TrimSpace(cfg.IscsiStorage), "true") {
+		strings.EqualFold(strings.TrimSpace(cfg.StorageNetwork), "true") {
 		if target := strings.TrimSpace(host.AblecubePn); target != "" {
 			return target
 		}

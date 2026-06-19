@@ -20,7 +20,7 @@
 
 주의: 현재 `main.go`의 listen port는 `8090`으로 고정되어 있다. `ABLESTACK_API_PORT`는 서버 listen port가 아니라 노드 간 원격 API URL을 만들 때 사용된다. RPM 설치 시 `firewall-cmd`가 있으면 `8090/tcp`를 runtime/permanent 모두 열고, `firewalld`가 꺼져 있으면 `enable --now`를 시도한다.
 
-Swagger tag는 `Cube-License`, `Cube-Nic`, `Glue-RGW`, `Glue-GlueFS`처럼 기능 단위로 나뉜다. `/api/v1/glue` route와 Swagger Glue path는 SCVM에서만 노출되며, host/CCVM에서 Swagger `doc.json`을 요청하면 Glue path와 Glue model definition을 런타임에 제거한다.
+Swagger tag는 `Cube-License`, `Cube-Nic`, `Glue-RGW`, `Glue-GlueFS`처럼 기능 단위로 나뉜다. host/CCVM에서 Swagger `doc.json`을 요청하면 Glue path와 Glue model definition을 런타임에 제거한다. SCVM에서 요청하면 Glue 중심 화면이 되도록 Cube 운영/내부 통신 API path/tag를 숨기고, 인증, health, version, license 계열 API만 남긴다. 실제 route는 제거하지 않으므로 내부 fan-out 통신은 그대로 동작한다.
 
 ## RPM 설치 및 경로 정책
 
@@ -124,7 +124,7 @@ SCVM 전용 Glue API가 사용하는 Ceph, podman, Samba, realmd 계열 명령�
       }
     ],
     "external_timeserver": "",
-    "iscsi_storage": ""
+    "storage_network": ""
   },
   "systemProfile": {
     "bootstrap": {
@@ -230,6 +230,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | Auth | POST | `/auth/internal-token/rotate` | Bearer token | 내부 호스트 간 공유 토큰 교체 |
 | Health | GET | `/health` | 없음 | 라이선스 등록 전에도 호출 가능한 API server health |
 | 디스크 | GET | `/cube/disk` | `action=list,gfs,rbd,detail`, `view=tree,flat,list` | 디스크, multipath, RBD, RAID controller 정보 조회 |
+| Multipath | POST | `/cube/multipath/sync` | `action=sync,rescan` | SSH/SCP 없이 ablecube host 대상 SCSI rescan 및 multipath bindings/wwids 동기화 |
 | 네트워크 | GET | `/cube/nics` | `action=list,detail` | ethernet, bridge, bond, IP, MAC, speed 조회 |
 | 호스트 | GET | `/cube/hosts` | 없음 | `/etc/hosts`를 네트워크/역할별로 조회 |
 | 클러스터 | GET | `/cube/cluster/health` | `option=host,scvm,ccvm` 콤마 조합 | API 생존 및 대상 노드 상태 점검 |
@@ -237,7 +238,9 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | 배포 실행 | POST | `/cube/deploy/run` | `mode,only,skip` | 라이선스/클러스터/SCVM/스토리지/CCVM 준비를 job으로 순차 실행 |
 | 배포 실행 | GET | `/cube/deploy/jobs` | 없음 | 최근 올인원 배포 job 목록 조회 |
 | 배포 실행 | GET | `/cube/deploy/jobs/{job_id}` | path `job_id` | 올인원 배포 job 상세 상태 조회 |
-| 클러스터 | GET | `/cube/cluster/config` | 없음 | `cluster.json`의 `clusterConfig` 조회 |
+| SCVM | POST | `/cube/scvm/bootstrap` | `run_script` | 대표 SCVM의 `/root/bootstrap.sh` 실행 후 SCVM API health, 라이선스 등록/status 확인 |
+| CCVM | POST | `/cube/ccvm/bootstrap` | `run_script` | CCVM의 `/root/bootstrap.sh` 실행 후 CCVM API health, 라이선스 등록/status 확인 |
+| 클러스터 | GET | `/cube/cluster/config` | 없음 | 다운로드용 `clusterConfig`와 `security` 조회 |
 | 클러스터 | POST | `/cube/cluster/apply` | `insert,remove,reset,check` | 클러스터 구성 오케스트레이션 |
 | 클러스터 | POST | `/cube/cluster/apply-local` | 내부용 | 각 노드에서 실제 cluster config 적용 |
 | System Profile | GET | `/cube/system/config` | 없음 | `systemProfile` 조회 |
@@ -273,14 +276,14 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | License | POST | `/cube/license` | `status,register` | 라이선스 조회/등록 |
 | License | POST | `/cube/license/apply` | `register,status,roles` | 마스터 기준 ablecube/SCVM/CCVM role별 라이선스 fan-out |
 | Version | GET | `/version` | 없음 | 현재 노드의 OS/Kernel/Cockpit/Mold/ABLESTACK 패키지 버전 조회, HCI 계열은 Glue 버전 포함 |
-| Version | POST | `/cube/version/update` | `info,run` | 마운트된 ISO 버전 조회/업데이트 |
+| Version | POST | `/cube/version/update` | `info,run`, `update_type=all,mold` | 마운트된 ISO 버전 조회 및 `/opt/ABLESTACK_UPDATE` 복사 후 업데이트 |
 | Security | POST | `/cube/security/patch` | body flags | 보안 패치 실행 및 상태 업데이트 |
 | SSH Key | POST | `/cube/ssh/key` | `generate,download,upload` | `/root/.ssh` 키 생성, 암호화 단일 파일 다운로드/업로드 |
 | DB | POST | `/cube/db/dump` | `instantBackup,regularBackup,deleteOldBackup,checkBackup,deactiveBackup` | CCVM DB dump 및 스케줄 관리 |
 
 ## Glue API
 
-`/api/v1/glue`는 SCVM Cockpit에서 사용할 SCVM 전용 namespace다. API 서버 시작 시 SCVM role로 판정된 경우에만 route를 등록하므로, 물리 host와 CCVM에서 호출하면 `404 Not Found`가 반환된다. Swagger 문서도 같은 기준을 사용해 host/CCVM에서는 `Glue-*` tag와 `/glue` path를 숨긴다. 인증/라이선스 middleware는 기존 API와 동일하게 적용되므로, 라이선스 등록 전 public health처럼 열리는 API가 아니다.
+`/api/v1/glue`는 SCVM Cockpit에서 사용할 SCVM 전용 namespace다. API 서버 시작 시 SCVM role로 판정된 경우에만 route를 등록하므로, 물리 host와 CCVM에서 호출하면 `404 Not Found`가 반환된다. Swagger 문서도 같은 기준을 사용해 host/CCVM에서는 `Glue-*` tag와 `/glue` path를 숨기고, SCVM에서는 Glue API와 인증, health, version, license 계열 API만 노출한다. 인증/라이선스 middleware는 기존 API와 동일하게 적용되므로, 라이선스 등록 전 public health처럼 열리는 API가 아니다.
 
 SCVM role 판정 순서:
 
@@ -478,7 +481,7 @@ CLI에서 헤더 값만 필요하면:
 
 API access token 서명값은 활성 라이선스의 `license_key`에서 파생되므로, 각 호스트에 동일한 라이선스가 등록되면 별도 인증 서명값 동기화 없이 같은 token을 검증한다.
 
-`cluster apply`는 insert 흐름에서 현재 호스트의 `security.internal_token`을 보장하고, `apply-local` 요청 body의 `security.internal_token`에 같은 값을 포함한다. 원격 호스트의 token이 아직 비어 있는 최초 bootstrap 상태에서는 body token과 `X-Cube-Internal-Token` 헤더가 일치할 때만 `apply-local`을 허용하고, 이후 원격 호스트의 `cluster.json`에 같은 token을 저장한다.
+`cluster apply`는 insert 흐름에서 요청 body의 `security.internal_token`이 있으면 그 값을 그대로 현재 호스트와 `apply-local` 요청 body에 사용한다. 요청 body에 token이 없으면 현재 호스트의 `security.internal_token`을 보장하며, 기존 값이 없을 때 새 token을 생성한다. 원격 호스트의 token이 아직 비어 있는 최초 bootstrap 상태에서는 body token과 `X-Cube-Internal-Token` 헤더가 일치할 때만 `apply-local`을 허용하고, 이후 원격 호스트의 `cluster.json`에 같은 token을 저장한다.
 
 내부 token 교체는 아래 API로 수행한다. 이 API는 현재 `cluster.json`의 `hosts[].ablecube` 대상에 새 token을 적용한 뒤 현재 호스트의 token도 교체한다.
 
@@ -535,7 +538,7 @@ curl -sS "http://<ablecube-ip>:8090/api/v1/cube/cluster/health?target_hostname=N
 
 ### `GET /cube/cluster/config`
 
-`cluster.json`의 `clusterConfig` 섹션을 반환한다.
+`cluster.json` 다운로드에 필요한 `clusterConfig`와 `security`를 반환한다. `systemProfile`은 운영 상태라 다운로드 구성 파일에서는 제외한다. `security.internal_token`이 아직 없으면 이 조회 과정에서 생성해 응답에 포함한다.
 
 ```bash
 curl -sS http://<ablecube-ip>:8090/api/v1/cube/cluster/config
@@ -633,7 +636,7 @@ UI는 `stage`, `message_key`, `available_actions`를 기준으로 화면 상태�
 
 기존 개별 API를 유지한 상태에서 설치/배포 단계를 한 번의 job으로 순차 실행한다. 이 API는 HTTP 요청을 오래 붙잡지 않고 `202 Accepted`와 `job_id`를 반환하며, 실제 작업은 서버 내부 goroutine에서 진행한다. 진행 상태는 `/cube/deploy/jobs/{job_id}`로 조회한다.
 
-최초 라이선스가 전혀 없는 신규 장비에서는 운영 API가 차단되므로, 먼저 마스터 노드에 `/cube/license`로 라이선스를 등록한 뒤 Bearer token을 발급받고 `/cube/deploy/run` 또는 `/cube/license/apply`를 실행한다. `/cube/deploy/run`의 `license_apply` 단계는 마스터에 등록된 현재 라이선스 파일을 전체 ablecube host로 배포하거나, 요청 body의 `license_content`/`licenses` 값을 사용한다. SCVM/CCVM은 VM 생성 후 API가 떠 있는 시점에 `scvm_bootstrap`/`ccvm_bootstrap` 단계에서 라이선스를 자동 등록한다.
+최초 라이선스가 전혀 없는 신규 장비에서는 운영 API가 차단되므로, 먼저 마스터 노드에 `/cube/license`로 라이선스를 등록한 뒤 Bearer token을 발급받고 `/cube/deploy/run` 또는 `/cube/license/apply`를 실행한다. `/cube/deploy/run`의 `license_apply` 단계는 마스터에 등록된 현재 라이선스 파일을 전체 ablecube host로 배포하거나, 요청 body의 `license_content`/`licenses` 값을 사용한다. SCVM/CCVM은 VM 생성 후 `scvm_bootstrap`/`ccvm_bootstrap` 단계에서 host qemu-guest-agent로 VM 내부 `/root/bootstrap.sh`를 실행하고, VM API health 확인 후 라이선스를 자동 등록한다.
 
 기본 실행 순서:
 
@@ -642,16 +645,18 @@ UI는 `stage`, `message_key`, `available_actions`를 기준으로 화면 상태�
 | `license_apply` | 마스터 라이선스 또는 요청 라이선스를 `hosts[].ablecube` 전체에 등록 | `license_content`, `licenses`, `license_filename` |
 | `cluster_apply` | 기존 `/cube/cluster/apply`와 같은 검증/대상 계산으로 클러스터 구성 적용 | `cluster` |
 | `scvm_prepare` | HCI/HCI-FS에서 host별 SCVM cloud-init, XML, lifecycle setup 실행 후 `/api/v1/health` 확인 | `scvm_by_host` |
-| `scvm_bootstrap` | SCVM API health 확인, 라이선스 자동 등록, license status 확인 | `license_content`, `licenses`, `license_filename` |
+| `scvm_bootstrap` | 대표 SCVM 1대의 `/root/bootstrap.sh` 실행, SCVM API health 확인, 라이선스 자동 등록, license status 확인 | `run_bootstrap_script`, `license_content`, `licenses`, `license_filename` |
 | `storage_prepare` | VM/HCI-FS 등에서 GFS/PCS 스토리지 준비 실행 | `gfs` |
 | `local_prepare` | Standalone에서 로컬 디스크 준비 실행 | `local` |
 | `ccvm_prepare` | CCVM cloud-init, XML, lifecycle setup 실행 후 `/api/v1/health` 확인 | `ccvm_cloudinit`, `ccvm_xml`, `ccvm_lifecycle` |
-| `ccvm_bootstrap` | CCVM API health 확인, 라이선스 자동 등록, license status 확인 | `license_content`, `licenses`, `license_filename` |
+| `ccvm_bootstrap` | CCVM의 `/root/bootstrap.sh` 실행, CCVM API health 확인, 라이선스 자동 등록, license status 확인 | `run_bootstrap_script`, `license_content`, `licenses`, `license_filename` |
 | `system_profile` | 성공한 step 기준으로 `systemProfile` 플래그를 전체 host에 반영 | `update_system_profile` |
 
 `system_profile` 단계는 성공한 step만 반영한다. `license_apply` 성공 시 `license.status=true`와 복호화된 라이선스 `oem` 기반 `license.type`을 적용하고, `scvm_bootstrap` 성공 시 `bootstrap.scvm=true`, `storage_prepare` 성공 시 VM/HCI-FS의 `bootstrap.gfs_configure=true`, `local_prepare` 성공 시 Standalone의 `bootstrap.local_configure=true`, `ccvm_bootstrap` 성공 시 `bootstrap.ccvm=true`를 적용한다. 모니터링 구성 완료를 뜻하는 `bootstrap.wall`은 별도 모니터링 구성 API/절차에서 반영한다.
 
 `/api/v1/health`와 `/health`는 라이선스 등록 전에도 호출 가능한 public health check이다. SCVM/CCVM template에는 `ablestack-api` RPM과 service enable 상태가 포함되어 있어야 하며, VM 안의 `cluster.json`은 `/etc/ablestack/properties/cluster.json` 경로에 있어야 한다.
+
+cloud-init은 VM 내부에 `/root/bootstrap.sh`를 전달만 하고 실행하지 않는다. 실제 bootstrap 스크립트 실행은 host의 `/cube/scvm/bootstrap`, `/cube/ccvm/bootstrap` API가 qemu-guest-agent로 수행한다. SCVM bootstrap 스크립트는 Ceph bootstrap과 전체 SCVM 후속 설정을 포함하므로 기본적으로 대표 SCVM 1대에서만 실행하고, 이후 라이선스 등록/status 확인은 전체 SCVM을 대상으로 수행한다. 스크립트 실행 후 라이선스만 재시도할 때는 직접 bootstrap API 요청 body에 `{"run_script":false}`를 전달하고, `/cube/deploy/run`에서는 `{"run_bootstrap_script":false}`를 전달한다.
 
 job 정보는 현재 프로세스 메모리에만 보관한다. API 서버가 재시작되면 `/cube/deploy/jobs` 이력은 초기화된다. 요청에 포함된 라이선스 원문은 job 응답에 저장하지 않고, target별 처리 결과만 남긴다.
 
@@ -670,7 +675,7 @@ curl -X POST http://<master-ablecube-ip>:8090/api/v1/cube/deploy/run \
       "ccvm": { "ip": "10.10.12.10" },
       "mngtNic": { "cidr": "16", "gw": "10.10.0.1", "dns": "8.8.8.8" },
       "external_timeserver": "time.google.com",
-      "iscsi_storage": "false",
+      "storage_network": "false",
       "pcs_cluster_list": ["10.10.12.1", "10.10.12.2", "10.10.12.3"],
       "hosts": [
         {
@@ -719,7 +724,7 @@ curl -X POST http://<master-ablecube-ip>:8090/api/v1/cube/deploy/run \
       "type": "ablestack-vm",
       "ccvm": { "ip": "10.10.31.10" },
       "mngtNic": { "cidr": "16", "gw": "10.10.0.1", "dns": "8.8.8.8" },
-      "iscsi_storage": "false",
+      "storage_network": "false",
       "pcs_cluster_list": ["10.10.31.1"],
       "hosts": [
         { "index": "1", "hostname": "ablecube31-1", "ablecube": "10.10.31.1" }
@@ -765,7 +770,7 @@ curl -sS http://<master-ablecube-ip>:8090/api/v1/cube/deploy/jobs/<job_id> \
 
 ### `cluster.json` 구조
 
-현재 `clusterConfig.ccvm`에는 CCVM IP만 저장한다. 관리망 CIDR, gateway, DNS는 `mngtNic`로 분리한다.
+현재 `clusterConfig.ccvm`에는 CCVM IP만 저장한다. 관리망 CIDR, gateway, DNS는 `mngtNic`로 분리한다. root의 `security.internal_token`은 노드 간 내부 API 통신 token이며, 클러스터 구성 준비 단계에서 없으면 API가 생성하고 있으면 입력 값을 그대로 사용한다.
 
 ```json
 {
@@ -794,7 +799,10 @@ curl -sS http://<master-ablecube-ip>:8090/api/v1/cube/deploy/jobs/<job_id> \
       }
     ],
     "external_timeserver": "time.google.com",
-    "iscsi_storage": "false"
+    "storage_network": "false"
+  },
+  "security": {
+    "internal_token": "<cluster-internal-token>"
   }
 }
 ```
@@ -821,7 +829,7 @@ HCI/HCI-filesystem 계열은 SCVM 관련 IP가 필요하므로 `hosts`에 아래
 
 | Action | 설명 | 주요 필수값 |
 | --- | --- | --- |
-| `insert` | `cluster.json` 반영, `/etc/hosts` 재구성, 시간 서버 설정 적용 | `type`, `ccvm`, `hosts`, `pcs_cluster_list`(`standalone` 제외), `iscsi_storage` |
+| `insert` | `cluster.json` 반영, `/etc/hosts` 재구성, 시간 서버 설정 적용 | `type`, `ccvm`, `hosts`, `pcs_cluster_list`(`standalone` 제외), `storage_network` |
 | `remove` | 지정 hostname 제거 | `remove_hostname` |
 | `reset` | `cluster.json`을 기본값으로 초기화 | 없음 |
 | `check` | 대상 ablecube API health 확인 | `hosts`, `type`, `ccvm` 또는 기존 `cluster.json` |
@@ -846,7 +854,10 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/cube/cluster/apply \
       "dns": "8.8.8.8"
     },
     "external_timeserver": "time.google.com",
-    "iscsi_storage": "false",
+    "storage_network": "false",
+    "security": {
+      "internal_token": "<cluster-internal-token>"
+    },
     "pcs_cluster_list": ["10.10.12.1", "10.10.12.2", "10.10.12.3"],
     "hosts": [
       {
@@ -955,6 +966,27 @@ curl -sS http://<ablecube-ip>:8090/api/v1/cube/hosts
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/disk?action=list"
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/disk?action=gfs"
 curl -sS "http://<ablecube-ip>:8090/api/v1/cube/disk?action=detail&view=flat"
+```
+
+### `POST /cube/multipath/sync`
+
+`cluster.json`의 `hosts[].ablecube` 대상 API로 fan-out하여 multipath 관련 작업을 수행한다. 기존 `multipath_sync.sh`의 SSH/SCP 흐름을 사용하지 않고, 내부 API 호출과 HTTP payload로 `/etc/multipath/bindings`, `/etc/multipath/wwids`를 전달한다.
+
+지원 action:
+
+| Action | 설명 |
+| --- | --- |
+| `sync` | 각 host에서 SCSI rescan, `mpathconf --enable`, `multipathd` enable/restart, bindings/wwids 동기화 수행 |
+| `rescan` | 각 host에서 `/sys/class/scsi_host/*/scan`만 실행 |
+
+```bash
+curl -X POST http://<ablecube-ip>:8090/api/v1/cube/multipath/sync \
+  -H "Content-Type: application/json" \
+  -d '{"action":"sync"}'
+
+curl -X POST http://<ablecube-ip>:8090/api/v1/cube/multipath/sync \
+  -H "Content-Type: application/json" \
+  -d '{"action":"rescan"}'
 ```
 
 ### `GET /cube/nics`
@@ -1413,7 +1445,7 @@ curl -sS http://<ablecube-ip>:8090/api/v1/cube/gfs/resource/status
 
 ### `GET /cube/gfs/disk/status`
 
-GFS2로 마운트된 디스크 목록과 multipath/single mode 정보를 조회한다.
+GFS2로 마운트된 디스크 목록과 multipath/single mode 정보를 조회한다. `blockdevices[]`에는 기존 `size`와 함께 `df -hP` 기준 `used`, `avail`, `use_percent`가 포함된다.
 
 ```bash
 curl -sS http://<ablecube-ip>:8090/api/v1/cube/gfs/disk/status
@@ -1628,21 +1660,32 @@ curl http://<ablecube-ip>:8090/api/v1/version \
 
 ### `POST /cube/version/update`
 
-마운트된 ABLESTACK ISO에서 버전 정보를 조회하거나 `update.sh`를 실행한다.
+마운트된 ABLESTACK ISO에서 버전 정보를 조회하거나 ISO 내용을 `/opt/ABLESTACK_UPDATE`로 복사한 뒤 선택한 업데이트 스크립트를 실행한다. `update_type`은 생략하면 `all`로 처리한다.
+
+지원 업데이트 방식:
+
+| update_type | 실행 스크립트 | 설명 |
+| --- | --- | --- |
+| `all` | `update-all.sh` | 커널, Mold 등 전체 업데이트 |
+| `mold` | `update-mold.sh` | Mold 업데이트. host와 CCVM 대상 후처리는 스크립트가 담당 |
 
 ```bash
 curl -X POST http://<ablecube-ip>:8090/api/v1/cube/version/update \
   -H "Content-Type: application/json" \
-  -d '{"action":"info","mount_path":"/mnt/ablestack-iso"}'
+  -d '{"action":"info","mount_path":"/mnt/ablestack-iso","update_type":"all"}'
 ```
 
 ```bash
 curl -X POST http://<ablecube-ip>:8090/api/v1/cube/version/update \
   -H "Content-Type: application/json" \
-  -d '{"action":"run","mount_path":"/mnt/ablestack-iso"}'
+  -d '{"action":"run","mount_path":"/mnt/ablestack-iso","update_type":"mold"}'
 ```
 
-`mount_path`는 절대 경로여야 하며, 내부에 `ks/ablestack-ks.cfg`와 `update.sh`가 있어야 한다.
+`mount_path`는 절대 경로여야 하며, 내부에 `ks/ablestack-ks.cfg`와 선택한 업데이트 스크립트가 있어야 한다. `run` 실행 시 기존 `/opt/ABLESTACK_UPDATE` 디렉터리는 삭제 후 다시 생성되며, 이 경로가 심볼릭 링크 또는 마운트 지점이면 실행하지 않는다.
+
+`info` 응답은 화면 표시용으로 현재/대상 OS와 Mold 버전을 함께 반환한다. 대상 OS 버전은 `ks/ablestack-ks.cfg`의 `ABLESTACK_VERSION`을 사용한다. 대상 Mold 버전은 `AppStream/Packages/mold`의 `cloudstack-common`/`cloudstack-management`/`cloudstack-agent`/`cloudstack-ui`/`cloudstack-usage` RPM 파일명에서 우선 추출하며, 예시는 `4.21.0.0-Mold.Diplo.202606121525`처럼 버전명과 날짜까지만 반환한다. RPM 파일명에서 찾지 못하면 `ks/ablestack-ks.cfg`의 `MOLD_VERSION`, `ACS_VERSION`, `CLOUDSTACK_VERSION` 또는 ISO 내부 `cloudstack-help-text`의 `ACS_VERSION`을 사용한다.
+
+`run`은 `/cube/deploy/status`가 `stage=ready`인 경우에만 실행된다. 화면에서 버튼을 숨기더라도 직접 API 호출을 막기 위한 서버 측 조건이다.
 
 ## Security Patch API
 

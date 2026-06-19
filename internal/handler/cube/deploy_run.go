@@ -601,7 +601,7 @@ func runDeployRunSCVMBootstrap(req DeployRunRequest, authHeader string, executed
 	if !executed[CubeModel.DeployRunStepSCVMPrepare] && !deployRunStepExplicit(req, CubeModel.DeployRunStepSCVMBootstrap) {
 		return deployRunSkipped("scvm_bootstrap waits for scvm_prepare or explicit selection", nil), nil
 	}
-	return runDeployRunLicenseBootstrap(req, cfg, licenseApplyRoleSCVM, CubeModel.DeployRunStepSCVMBootstrap, authHeader)
+	return bootstrapResponseToDeployOutcome(runBootstrapRole(bootstrapRequestFromDeployRun(req), cfg, licenseApplyRoleSCVM, authHeader))
 }
 
 func runDeployRunStoragePrepare(req DeployRunRequest) (deployRunStepOutcome, error) {
@@ -714,7 +714,7 @@ func runDeployRunCCVMBootstrap(req DeployRunRequest, authHeader string, executed
 	if !executed[CubeModel.DeployRunStepCCVMPrepare] && !deployRunStepExplicit(req, CubeModel.DeployRunStepCCVMBootstrap) {
 		return deployRunSkipped("ccvm_bootstrap waits for ccvm_prepare or explicit selection", nil), nil
 	}
-	return runDeployRunLicenseBootstrap(req, cfg, licenseApplyRoleCCVM, CubeModel.DeployRunStepCCVMBootstrap, authHeader)
+	return bootstrapResponseToDeployOutcome(runBootstrapRole(bootstrapRequestFromDeployRun(req), cfg, licenseApplyRoleCCVM, authHeader))
 }
 
 func runCCVMCloudInitForDeploy(cfg *CubeModel.ClusterConfigSection, req CCVMCloudInitCreateRequest) GenCloudInitResponse {
@@ -740,50 +740,6 @@ func runCCVMCloudInitForDeploy(cfg *CubeModel.ClusterConfigSection, req CCVMClou
 	}
 	resp.Message = ccvmCloudInitSuccessMessage
 	return resp
-}
-
-func runDeployRunLicenseBootstrap(req DeployRunRequest, cfg *CubeModel.ClusterConfigSection, role string, step string, authHeader string) (deployRunStepOutcome, error) {
-	targets, err := buildLicenseApplyTargets(LicenseApplyRequest{Roles: []string{role}}, cfg)
-	if err != nil {
-		return deployRunStepOutcome{}, err
-	}
-	if len(targets) == 0 {
-		return deployRunStepOutcome{}, fmt.Errorf("%s target not found", role)
-	}
-
-	readiness := make([]map[string]any, 0, len(targets))
-	for _, target := range targets {
-		health, err := waitDeployRunAPIHealth(target.Target)
-		health["role"] = target.Role
-		health["hostname"] = target.Hostname
-		readiness = append(readiness, health)
-		if err != nil {
-			return deployRunStepOutcome{Output: map[string]any{"health": readiness}}, err
-		}
-	}
-
-	licenseReq := LicenseApplyRequest{
-		Action:         "register",
-		LicenseContent: req.LicenseContent,
-		Licenses:       req.Licenses,
-		Filename:       req.LicenseFilename,
-		Roles:          []string{role},
-	}
-	applyResp := runLicenseApply(licenseReq, cfg, authHeader)
-	output := map[string]any{
-		"health":        readiness,
-		"license_apply": applyResp,
-	}
-	if applyResp.Code != http.StatusOK {
-		return deployRunStepOutcome{Output: output}, fmt.Errorf(firstNonEmpty(applyResp.Message, step+" license apply failed"))
-	}
-
-	statusResp := runLicenseApply(LicenseApplyRequest{Action: "status", Roles: []string{role}}, cfg, authHeader)
-	output["license_status"] = statusResp
-	if statusResp.Code != http.StatusOK {
-		return deployRunStepOutcome{Output: output}, fmt.Errorf(firstNonEmpty(statusResp.Message, step+" license status failed"))
-	}
-	return deployRunSucceeded(step+" success", output), nil
 }
 
 func waitDeployRunAPIHealth(target string) (map[string]any, error) {

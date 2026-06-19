@@ -81,6 +81,8 @@ type DeployRunRequest struct {
 	Licenses map[string]string `json:"licenses,omitempty"`
 	// license filename used when saving on targets.
 	LicenseFilename string `json:"license_filename,omitempty" example:"license.lic"`
+	// scvm_bootstrap/ccvm_bootstrap 단계에서 VM 내부 /root/bootstrap.sh를 실행할지 여부. 기본값은 true.
+	RunBootstrapScript *bool `json:"run_bootstrap_script,omitempty" example:"true"`
 
 	// cluster apply request. If omitted, cluster_apply is skipped unless explicitly selected.
 	Cluster *ClusterApplyRequest `json:"cluster,omitempty"`

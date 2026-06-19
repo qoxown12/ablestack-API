@@ -27,7 +27,7 @@
             }
         ],
         "external_timeserver": "",
-        "iscsi_storage": ""
+        "storage_network": ""
     },
     "security": {
         "internal_token": ""

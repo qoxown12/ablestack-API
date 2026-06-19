@@ -154,7 +154,7 @@ curl -sS http://10.10.12.1:8090/api/v1/cube/disk?action=list
 - [API 실행 및 상세 설명](docs/api-execution-and-description.md)
 - [올인원 배포 실행 가이드](docs/deploy-run-guide.md)
 - [SCVM SMB API 테스트 체크리스트](docs/scvm-smb-test-checklist.md)
-- Swagger: `/swagger/index.html` (`Cube-*`, `Glue-*` 기능 tag 기준. Glue path는 SCVM에서만 노출)
+- Swagger: `/swagger/index.html` (`Cube-*`, `Glue-*` 기능 tag 기준. host/CCVM은 Cube 중심, SCVM은 Glue와 라이선스 중심)
 
 ## Cluster Fan-out Model
 

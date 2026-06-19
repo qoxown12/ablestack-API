@@ -81,10 +81,10 @@ func CreateCCVMCloudInit(context *gin.Context) {
 	targets, targetField := ccvmCloudInitCopyTargets(cfg)
 	appendAbleStackAPILog(
 		"ccvm_cloudinit",
-		"event=targets client=%q cluster_type=%q iscsi_storage=%q target_field=%s target_count=%d targets=%q",
+		"event=targets client=%q cluster_type=%q storage_network=%q target_field=%s target_count=%d targets=%q",
 		clientIP,
 		strings.TrimSpace(cfg.Type),
-		strings.TrimSpace(cfg.IscsiStorage),
+		strings.TrimSpace(cfg.StorageNetwork),
 		targetField,
 		len(targets),
 		formatHosts(targets),
@@ -195,7 +195,7 @@ func ccvmCloudInitCopyTargets(cfg *CubeModel.ClusterConfigSection) ([]string, st
 	}
 
 	useAblecube := strings.EqualFold(strings.TrimSpace(cfg.Type), "ablestack-vm") &&
-		!strings.EqualFold(strings.TrimSpace(cfg.IscsiStorage), "true")
+		!strings.EqualFold(strings.TrimSpace(cfg.StorageNetwork), "true")
 	targetField := ablecubePnField
 	if useAblecube {
 		targetField = ablecubeField

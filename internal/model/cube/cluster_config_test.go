@@ -23,6 +23,23 @@ func TestClusterApplyRequestNormalizeUsesMngtNic(t *testing.T) {
 	}
 }
 
+func TestClusterApplyRequestNormalizeAcceptsLegacyIscsiStorage(t *testing.T) {
+	req := &ClusterApplyRequest{
+		DeprecatedIscsiStorage: "true",
+	}
+
+	if err := req.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+
+	if req.StorageNetwork != "true" {
+		t.Fatalf("StorageNetwork = %q, want true", req.StorageNetwork)
+	}
+	if req.DeprecatedIscsiStorage != "" {
+		t.Fatalf("DeprecatedIscsiStorage = %q, want empty", req.DeprecatedIscsiStorage)
+	}
+}
+
 func TestClusterConfigSectionMarshalOmitsEmptyVMScvmFields(t *testing.T) {
 	cfg := ClusterConfigSection{
 		Type:       "ablestack-vm",
@@ -33,7 +50,7 @@ func TestClusterConfigSectionMarshalOmitsEmptyVMScvmFields(t *testing.T) {
 			{Index: "1", Hostname: "ablecube31-1", Ablecube: "10.10.31.1"},
 		},
 		ExternalTimeserver: "time.google.com",
-		IscsiStorage:       "false",
+		StorageNetwork:     "false",
 	}
 
 	raw, err := json.Marshal(cfg)
@@ -44,6 +61,12 @@ func TestClusterConfigSectionMarshalOmitsEmptyVMScvmFields(t *testing.T) {
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
+	}
+	if got := out["storage_network"]; got != "false" {
+		t.Fatalf("storage_network = %#v, want false", got)
+	}
+	if _, ok := out["iscsi_storage"]; ok {
+		t.Fatalf("iscsi_storage should not be present")
 	}
 
 	ccvm := out["ccvm"].(map[string]any)
@@ -59,6 +82,19 @@ func TestClusterConfigSectionMarshalOmitsEmptyVMScvmFields(t *testing.T) {
 		if _, ok := host[key]; ok {
 			t.Fatalf("vm host field %s should not be present", key)
 		}
+	}
+}
+
+func TestClusterConfigSectionUnmarshalAcceptsLegacyIscsiStorage(t *testing.T) {
+	var cfg ClusterConfigSection
+	if err := json.Unmarshal([]byte(`{"type":"ablestack-vm","iscsi_storage":"true"}`), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.StorageNetwork != "true" {
+		t.Fatalf("StorageNetwork = %q, want true", cfg.StorageNetwork)
+	}
+	if cfg.DeprecatedIscsiStorage != "" {
+		t.Fatalf("DeprecatedIscsiStorage = %q, want empty", cfg.DeprecatedIscsiStorage)
 	}
 }
 

@@ -51,8 +51,8 @@ func TestCCVMCloudInitCopyTargetsKeepsAblecubePnForHCI(t *testing.T) {
 
 func ccvmCloudInitTargetTestConfig(clusterType string, iscsiStorage string) CubeModel.ClusterConfigSection {
 	return CubeModel.ClusterConfigSection{
-		Type:         clusterType,
-		IscsiStorage: iscsiStorage,
+		Type:           clusterType,
+		StorageNetwork: iscsiStorage,
 		Hosts: []CubeModel.ClusterHost{
 			{
 				Index:      "1",
