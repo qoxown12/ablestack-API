@@ -20,7 +20,7 @@ const gfsDiskStatusCommandTimeout = 10 * time.Second
 //
 //	@Summary		GFS Disk Status
 //	@Description	GFS2로 마운트된 디스크 목록을 조회합니다.
-//	@Tags			CUBE - GFS
+//	@Tags			Cube-GFS
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.GFSDiskStatusResponse
@@ -63,6 +63,10 @@ func loadGFSDiskStatus() (CubeModel.GFSDiskStatusValue, error) {
 	if err != nil {
 		return CubeModel.GFSDiskStatusValue{}, err
 	}
+	usageByMountpoint, err := readGFSDiskUsage(mounts)
+	if err != nil {
+		return CubeModel.GFSDiskStatusValue{}, err
+	}
 
 	osType := ""
 	if cfg, err := loadClusterConfigSection(); err == nil && cfg != nil {
@@ -71,7 +75,7 @@ func loadGFSDiskStatus() (CubeModel.GFSDiskStatusValue, error) {
 
 	multipathMode := isGFSMultipathMode(blockdevices)
 	diskIDByKname := readGFSDiskIDByKname()
-	return CubeModel.BuildGFSDiskStatus(blockdevices, mounts, osType, multipathMode, diskIDByKname), nil
+	return CubeModel.BuildGFSDiskStatus(blockdevices, mounts, osType, multipathMode, diskIDByKname, usageByMountpoint), nil
 }
 
 func runGFSDiskLsblk() (string, error) {
@@ -107,6 +111,37 @@ func readGFS2Mounts() ([]CubeModel.GFSMount, error) {
 		return nil, fmt.Errorf("failed to read mounts: %w", err)
 	}
 	return CubeModel.ParseGFS2Mounts(data), nil
+}
+
+func readGFSDiskUsage(mounts []CubeModel.GFSMount) (map[string]CubeModel.GFSDiskUsage, error) {
+	if len(mounts) == 0 {
+		return map[string]CubeModel.GFSDiskUsage{}, nil
+	}
+
+	args := []string{"-hP"}
+	for _, mount := range mounts {
+		mountpoint := strings.TrimSpace(mount.Mountpoint)
+		if mountpoint == "" {
+			continue
+		}
+		args = append(args, mountpoint)
+	}
+	if len(args) == 1 {
+		return map[string]CubeModel.GFSDiskUsage{}, nil
+	}
+
+	out, timedOut, err := runCommandOutputWithEnv("df", gfsDiskStatusCommandTimeout, gfsDiskCommandEnv(), args...)
+	if timedOut {
+		return nil, fmt.Errorf("df timed out after %s", gfsDiskStatusCommandTimeout)
+	}
+	if err != nil {
+		msg := strings.TrimSpace(out)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, fmt.Errorf("df failed: %s", msg)
+	}
+	return CubeModel.ParseGFSDiskUsageDF([]byte(out)), nil
 }
 
 func isGFSMultipathMode(blockdevices []CubeModel.GFSBlockDevice) bool {

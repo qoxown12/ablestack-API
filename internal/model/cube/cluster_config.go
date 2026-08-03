@@ -2,8 +2,12 @@ package cube
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"sync"
 )
+
+const PCSClusterMaxHosts = 16
 
 type TypeClusterConfig struct {
 	Data map[string]any `json:"-"`
@@ -78,6 +82,10 @@ func (r *ClusterApplyRequest) Normalize() error {
 		r.ExternalTimeserver = r.DeprecatedExtenalTimeserver
 		r.DeprecatedExtenalTimeserver = ""
 	}
+	if r.StorageNetwork == "" && r.DeprecatedIscsiStorage != "" {
+		r.StorageNetwork = r.DeprecatedIscsiStorage
+		r.DeprecatedIscsiStorage = ""
+	}
 	if r.CCVM != nil {
 		if r.CCVMMngtIP == "" {
 			r.CCVMMngtIP = r.CCVM.IP
@@ -127,6 +135,8 @@ type ClusterApplyRequest struct {
 	CCVM *ClusterCCVMConfig `json:"ccvm,omitempty"`
 	// management NIC config
 	MngtNic *ClusterMngtNicConfig `json:"mngtNic,omitempty"`
+	// security config for internal fan-out calls
+	Security *ClusterSecurityConfig `json:"security,omitempty" swaggerignore:"true"`
 	// ccvm management IP (internal)
 	CCVMMngtIP string `json:"-"`
 	// management NIC CIDR (internal)
@@ -145,20 +155,29 @@ type ClusterApplyRequest struct {
 	ExcludeHostname string `json:"exclude_hostname" example:"ablecube31-2"`
 	// remove hostname
 	RemoveHostname string `json:"remove_hostname" example:"ablecube31-3"`
-	// target hostname (alias of remove_hostname)
-	TargetHostname string `json:"target_hostname" example:"ablecube31-3"`
+	// target hostname (deprecated alias of remove_hostname)
+	TargetHostname string `json:"target_hostname,omitempty" swaggerignore:"true"`
 	// new hostname (option=add: exclude scvm fanout)
 	NewHostname string `json:"new_hostname,omitempty" example:"ablecube12-3"`
 	// external timeserver
 	ExternalTimeserver string `json:"external_timeserver" example:"time.google.com"`
 	// external timeserver (deprecated typo)
-	DeprecatedExtenalTimeserver string `json:"extenal_timeserver,omitempty"`
-	// iscsi storage usage (true/false)
-	IscsiStorage string `json:"iscsi_storage" example:"false"`
+	DeprecatedExtenalTimeserver string `json:"extenal_timeserver,omitempty" swaggerignore:"true"`
+	// storage network usage (true/false)
+	StorageNetwork string `json:"storage_network" example:"false"`
+	// storage network usage (deprecated: use storage_network)
+	DeprecatedIscsiStorage string `json:"iscsi_storage,omitempty" swaggerignore:"true"`
 	// hosts list (preferred)
 	Hosts []ClusterHost `json:"hosts"`
 	// existing hostnames from cluster.json (internal)
 	ExistingHostnames []string `json:"-"`
+}
+
+// ClusterSecurityConfig describes security settings stored at cluster.json root.
+// @name ClusterSecurityConfig
+type ClusterSecurityConfig struct {
+	// internal token for API server fan-out calls
+	InternalToken string `json:"internal_token,omitempty"`
 }
 
 // ClusterHost describes a single host item.
@@ -201,7 +220,7 @@ type ClusterApplyLocalResponse struct {
 type ClusterHealthTargetResult struct {
 	// target role (host/scvm/ccvm)
 	Role string `json:"role" example:"host"`
-	// hostname for host/scvm targets
+	// role display name. host uses hosts[].hostname, scvm uses scvm+index, ccvm uses ccvm.
 	Hostname string `json:"hostname,omitempty" example:"ablecube12-1"`
 	// target IP
 	Target string `json:"target" example:"10.10.31.1"`
@@ -229,8 +248,8 @@ type ClusterHealthResponse struct {
 type ClusterConfigResponse struct {
 	// cluster configuration data
 	ClusterConfig ClusterConfigSection `json:"clusterConfig"`
-	// system profile data
-	SystemProfile ClusterSystemProfile `json:"systemProfile"`
+	// internal API security config
+	Security ClusterSecurityConfig `json:"security"`
 }
 
 // ClusterConfigSection describes the clusterConfig block.
@@ -250,8 +269,24 @@ type ClusterConfigSection struct {
 	Hosts []ClusterHost `json:"hosts"`
 	// external timeserver
 	ExternalTimeserver string `json:"external_timeserver" example:"time.google.com"`
-	// iscsi storage usage
-	IscsiStorage string `json:"iscsi_storage" example:"false"`
+	// storage network usage
+	StorageNetwork string `json:"storage_network" example:"false"`
+	// storage network usage (deprecated: use storage_network)
+	DeprecatedIscsiStorage string `json:"iscsi_storage,omitempty" swaggerignore:"true"`
+}
+
+func (c *ClusterConfigSection) UnmarshalJSON(data []byte) error {
+	type alias ClusterConfigSection
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*c = ClusterConfigSection(raw)
+	if c.StorageNetwork == "" && c.DeprecatedIscsiStorage != "" {
+		c.StorageNetwork = c.DeprecatedIscsiStorage
+	}
+	c.DeprecatedIscsiStorage = ""
+	return nil
 }
 
 // ClusterCCVMConfig describes ccvm network info.
@@ -278,7 +313,7 @@ type ClusterMngtNicConfig struct {
 	DNS string `json:"dns" example:"8.8.8.8"`
 }
 
-// ClusterPCSClusterConfig describes pcs cluster IPs.
+// ClusterPCSClusterConfig describes pcs cluster IPs. hostname4...hostname16 are also preserved at runtime.
 // @name ClusterPCSClusterConfig
 type ClusterPCSClusterConfig struct {
 	// pcs cluster node #1
@@ -286,7 +321,145 @@ type ClusterPCSClusterConfig struct {
 	// pcs cluster node #2
 	Hostname2 string `json:"hostname2" example:"10.10.31.2"`
 	// pcs cluster node #3
-	Hostname3 string `json:"hostname3" example:"10.10.31.3"`
+	Hostname3 string   `json:"hostname3" example:"10.10.31.3"`
+	Hostnames []string `json:"-" swaggerignore:"true"`
+}
+
+func (c *ClusterPCSClusterConfig) UnmarshalJSON(data []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	values := make([]string, 0, PCSClusterMaxHosts)
+	if rawHostnames, ok := raw["hostnames"]; ok {
+		values = append(values, stringSliceFromAny(rawHostnames)...)
+	}
+	for i := 1; i <= PCSClusterMaxHosts; i++ {
+		if value, ok := raw[fmt.Sprintf("hostname%d", i)]; ok {
+			values = append(values, pcsStringFromAny(value))
+		}
+	}
+
+	c.Hostnames = NormalizePCSClusterList(values)
+	c.Hostname1 = pcsHostnameAt(c.Hostnames, 0)
+	c.Hostname2 = pcsHostnameAt(c.Hostnames, 1)
+	c.Hostname3 = pcsHostnameAt(c.Hostnames, 2)
+	return nil
+}
+
+func (c ClusterPCSClusterConfig) MarshalJSON() ([]byte, error) {
+	hostnames := c.HostnameList()
+	out := make(map[string]string, maxInt(len(hostnames), 3))
+	for i, hostname := range hostnames {
+		out[fmt.Sprintf("hostname%d", i+1)] = hostname
+	}
+	for i := len(hostnames) + 1; i <= 3; i++ {
+		out[fmt.Sprintf("hostname%d", i)] = ""
+	}
+	return json.Marshal(out)
+}
+
+func (c ClusterPCSClusterConfig) HostnameList() []string {
+	values := c.Hostnames
+	if len(values) == 0 {
+		values = []string{c.Hostname1, c.Hostname2, c.Hostname3}
+	}
+	return NormalizePCSClusterList(values)
+}
+
+func NormalizePCSClusterList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+		if len(out) >= PCSClusterMaxHosts {
+			break
+		}
+	}
+	return out
+}
+
+func CountPCSClusterList(values []string) int {
+	return countPCSClusterList(values, 0)
+}
+
+func ValidatePCSClusterList(values []string, min int) error {
+	count := countPCSClusterList(values, PCSClusterMaxHosts+1)
+	if count < min {
+		return fmt.Errorf("pcs_cluster_list requires at least %d host(s)", min)
+	}
+	if count > PCSClusterMaxHosts {
+		return fmt.Errorf("pcs_cluster_list supports up to %d hosts", PCSClusterMaxHosts)
+	}
+	return nil
+}
+
+func countPCSClusterList(values []string, limit int) int {
+	count := 0
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		count++
+		if limit > 0 && count >= limit {
+			return count
+		}
+	}
+	return count
+}
+
+func pcsHostnameAt(values []string, index int) string {
+	if index < 0 || index >= len(values) {
+		return ""
+	}
+	return values[index]
+}
+
+func stringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, pcsStringFromAny(item))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func pcsStringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return fmt.Sprint(value)
+}
+
+func maxInt(left int, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 // ClusterBootstrapConfig describes bootstrap flags.

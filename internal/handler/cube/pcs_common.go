@@ -86,11 +86,7 @@ func buildPCSExecutionTargets(cfg *CubeModel.ClusterConfigSection) []pcsExecutio
 	if cfg == nil {
 		return nil
 	}
-	pcsHosts := []string{
-		strings.TrimSpace(cfg.PCSCluster.Hostname1),
-		strings.TrimSpace(cfg.PCSCluster.Hostname2),
-		strings.TrimSpace(cfg.PCSCluster.Hostname3),
-	}
+	pcsHosts := cfg.PCSCluster.HostnameList()
 
 	out := make([]pcsExecutionTarget, 0, len(pcsHosts))
 	seen := map[string]struct{}{}
@@ -103,8 +99,8 @@ func buildPCSExecutionTargets(cfg *CubeModel.ClusterConfigSection) []pcsExecutio
 		hostname := pcsHost
 		if ok {
 			hostname = strings.TrimSpace(host.Hostname)
-			if strings.TrimSpace(host.Ablecube) != "" {
-				target = strings.TrimSpace(host.Ablecube)
+			if hostTarget := ccvmHostAPITarget(cfg, host); hostTarget != "" {
+				target = hostTarget
 			}
 		}
 		key := target + "|" + pcsHost
@@ -119,6 +115,17 @@ func buildPCSExecutionTargets(cfg *CubeModel.ClusterConfigSection) []pcsExecutio
 		})
 	}
 	return out
+}
+
+func ccvmHostAPITarget(cfg *CubeModel.ClusterConfigSection, host CubeModel.ClusterHost) string {
+	if cfg != nil &&
+		strings.EqualFold(strings.TrimSpace(cfg.Type), "ablestack-vm") &&
+		strings.EqualFold(strings.TrimSpace(cfg.StorageNetwork), "true") {
+		if target := strings.TrimSpace(host.AblecubePn); target != "" {
+			return target
+		}
+	}
+	return strings.TrimSpace(host.Ablecube)
 }
 
 func findPCSClusterHost(cfg *CubeModel.ClusterConfigSection, pcsHost string) (CubeModel.ClusterHost, bool) {

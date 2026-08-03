@@ -21,6 +21,7 @@ type CCVMSecondaryResizeResponse = CubeModel.CCVMSecondaryResizeResponse
 const (
 	ccvmSecondaryResizeLocalHeader = "X-Cube-CCVM-Secondary-Resize-Local"
 	ccvmSecondaryResizeModeHeader  = "X-Cube-CCVM-Secondary-Resize-Mode"
+	ccvmSecondaryResizeGuestHeader = "X-Cube-CCVM-Secondary-Resize-Guest"
 	ccvmSecondaryResizeModePing    = "ping"
 	ccvmSecondaryResizeModeGrow    = "grow"
 	ccvmSecondaryResizeRetName     = "CCVM Secondary Resize"
@@ -41,7 +42,7 @@ const (
 //
 //	@Summary		CCVM Secondary Resize
 //	@Description	CCVM secondary 용량을 추가합니다. SSH 대신 qemu-guest-agent를 사용하며, PCS 제어는 pcs.go helper를 사용합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMSecondaryResizeRequest	true	"ccvm secondary resize request"
@@ -60,7 +61,11 @@ func CCVMSecondaryResize(context *gin.Context) {
 	}
 
 	if isCCVMSecondaryResizeLocalRequest(context) {
-		resp := runCCVMSecondaryResizeLocalMode(req, strings.TrimSpace(context.GetHeader(ccvmSecondaryResizeModeHeader)))
+		resp := runCCVMSecondaryResizeLocalMode(
+			req,
+			strings.TrimSpace(context.GetHeader(ccvmSecondaryResizeModeHeader)),
+			isCCVMSecondaryResizeGuestRequest(context),
+		)
 		context.JSON(statusCodeFromCCVMSecondaryResizeResponse(resp), resp)
 		return
 	}
@@ -98,6 +103,10 @@ func normalizeCCVMSecondaryResizeRequest(req *CCVMSecondaryResizeRequest) error 
 
 func isCCVMSecondaryResizeLocalRequest(context *gin.Context) bool {
 	return strings.EqualFold(strings.TrimSpace(context.GetHeader(ccvmSecondaryResizeLocalHeader)), "1")
+}
+
+func isCCVMSecondaryResizeGuestRequest(context *gin.Context) bool {
+	return strings.EqualFold(strings.TrimSpace(context.GetHeader(ccvmSecondaryResizeGuestHeader)), "1")
 }
 
 func runCCVMSecondaryResize(req CCVMSecondaryResizeRequest, cfg *CubeModel.ClusterConfigSection) CCVMSecondaryResizeResponse {
@@ -157,30 +166,40 @@ func runCCVMSecondaryResizeRBD(req CCVMSecondaryResizeRequest, cfg *CubeModel.Cl
 }
 
 func runCCVMSecondaryResizeVM(req CCVMSecondaryResizeRequest, cfg *CubeModel.ClusterConfigSection, osType string) CCVMSecondaryResizeResponse {
-	if _, err := waitCCVMSecondaryGuestAgentOnStartedTarget(cfg, ccvmSecondaryResizeShortTO); err != nil {
+	if target, err := waitCCVMSecondaryCCVMAPIOnStartedResource(cfg, ccvmSecondaryResizeShortTO); err != nil {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_precheck_failed target=%q error=%q", target, err.Error())
 		return ccvmSecondaryResizeError(osType, "", "Please check if CCVM status is running normally.")
+	} else {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_precheck_success target=%q", target)
 	}
 	if err := ccvmSecondaryResizeDisablePCS(cfg); err != nil {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_disable_failed error=%q", err.Error())
 		return ccvmSecondaryResizeError(osType, "", err.Error())
 	}
 	if err := ccvmSecondaryResizeWaitPCSRole(cfg, "Stopped", ccvmSecondaryResizeTimeout); err != nil {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_stop_wait_failed error=%q", err.Error())
 		return ccvmSecondaryResizeError(osType, "", err.Error())
 	}
 	if _, err := runCCVMSecondaryResizeCommand(ccvmSecondaryResizeTimeout, "qemu-img", "resize", ccvmSecondaryVMImagePath, fmt.Sprintf("+%dG", req.AddSize)); err != nil {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_image_resize_failed error=%q", err.Error())
 		return ccvmSecondaryResizeError(osType, "", err.Error())
 	}
 	if err := ccvmSecondaryResizeEnablePCS(cfg); err != nil {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_enable_failed error=%q", err.Error())
 		return ccvmSecondaryResizeError(osType, "", err.Error())
 	}
 
-	target, err := waitCCVMSecondaryGuestAgentOnStartedTarget(cfg, ccvmSecondaryResizeTimeout)
+	target, err := waitCCVMSecondaryCCVMAPIOnStartedResource(cfg, ccvmSecondaryResizeTimeout)
 	if err != nil {
-		return ccvmSecondaryResizeError(osType, "", "CCVM SSH not available after start. Please check.")
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_start_wait_failed target=%q error=%q", target, err.Error())
+		return ccvmSecondaryResizeError(osType, "", "CCVM API not available after start. Please check.")
 	}
-	if err := ccvmSecondaryResizeGrowOnTarget(target.Target, req); err != nil {
-		return ccvmSecondaryResizeError(osType, target.Target, err.Error())
+	if err := ccvmSecondaryResizeGrowOnCCVM(cfg, req); err != nil {
+		appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_guest_grow_failed target=%q error=%q", target, err.Error())
+		return ccvmSecondaryResizeError(osType, target, err.Error())
 	}
-	return ccvmSecondaryResizeOK(osType, target.Target)
+	appendAbleStackAPILog("ccvm_secondary_resize", "event=vm_success target=%q add_size=%d", target, req.AddSize)
+	return ccvmSecondaryResizeOK(osType, target)
 }
 
 func runCCVMSecondaryResizeStandalone(req CCVMSecondaryResizeRequest, osType string) CCVMSecondaryResizeResponse {
@@ -209,14 +228,23 @@ func runCCVMSecondaryResizeStandalone(req CCVMSecondaryResizeRequest, osType str
 	return ccvmSecondaryResizeOK(osType, "local")
 }
 
-func runCCVMSecondaryResizeLocalMode(req CCVMSecondaryResizeRequest, mode string) CCVMSecondaryResizeResponse {
+func runCCVMSecondaryResizeLocalMode(req CCVMSecondaryResizeRequest, mode string, guestRequest bool) CCVMSecondaryResizeResponse {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case ccvmSecondaryResizeModePing:
+		if guestRequest {
+			return ccvmSecondaryResizeOK("", "ccvm")
+		}
 		if err := ccvmSecondaryResizeGuestPing(); err != nil {
 			return ccvmSecondaryResizeError("", "local", err.Error())
 		}
 		return ccvmSecondaryResizeOK("", "local")
 	case ccvmSecondaryResizeModeGrow:
+		if guestRequest {
+			if err := ccvmSecondaryResizeGrowGuestFilesystemDirect(); err != nil {
+				return ccvmSecondaryResizeError("", "ccvm", err.Error())
+			}
+			return ccvmSecondaryResizeOK("", "ccvm")
+		}
 		if err := ccvmSecondaryResizeGrowGuestFilesystem(); err != nil {
 			return ccvmSecondaryResizeError("", "local", err.Error())
 		}
@@ -230,6 +258,74 @@ func runCCVMSecondaryResizeLocalMode(req CCVMSecondaryResizeRequest, mode string
 			Target:  "local",
 		}
 	}
+}
+
+func waitCCVMSecondaryCCVMAPIOnStartedResource(cfg *CubeModel.ClusterConfigSection, timeout time.Duration) (string, error) {
+	target := ""
+	if cfg != nil {
+		target = strings.TrimSpace(cfg.CCVM.IP)
+	}
+	if target == "" {
+		return "", fmt.Errorf("ccvm.ip required")
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		status, err := ccvmSecondaryResizePCSStatus(cfg)
+		if err != nil {
+			lastErr = err
+		} else if !strings.EqualFold(status.Role, "Started") || strings.TrimSpace(status.Started) == "" {
+			lastErr = fmt.Errorf("cloudcenter_res is not started: role=%s started=%s", status.Role, status.Started)
+		} else if err := ccvmSecondaryResizePingCCVMAPI(target); err != nil {
+			lastErr = err
+		} else {
+			return target, nil
+		}
+
+		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return target, lastErr
+			}
+			return target, fmt.Errorf("ccvm api not available")
+		}
+		time.Sleep(ccvmSecondaryResizePoll)
+	}
+}
+
+func ccvmSecondaryResizePingCCVMAPI(target string) error {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return fmt.Errorf("ccvm.ip required")
+	}
+	if isLocalTarget(target) {
+		_, err := collectCCVMLocalStatus()
+		return err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	_, err := callCCVMStatus(client, target)
+	return err
+}
+
+func ccvmSecondaryResizeGrowOnCCVM(cfg *CubeModel.ClusterConfigSection, req CCVMSecondaryResizeRequest) error {
+	target := ""
+	if cfg != nil {
+		target = strings.TrimSpace(cfg.CCVM.IP)
+	}
+	if target == "" {
+		return fmt.Errorf("ccvm.ip required")
+	}
+	if isLocalTarget(target) {
+		return ccvmSecondaryResizeGrowGuestFilesystemDirect()
+	}
+	resp, err := callCCVMSecondaryResizeGuestRemote(target, req, ccvmSecondaryResizeModeGrow)
+	if err != nil {
+		return err
+	}
+	if resp.Code != http.StatusOK {
+		return fmt.Errorf("%s", firstNonEmpty(resp.Message, resp.Val))
+	}
+	return nil
 }
 
 func ccvmSecondaryResizeNewRBDSize(addSizeGiB int) (int64, error) {
@@ -411,6 +507,14 @@ func ccvmSecondaryResizeGrowOnTarget(target string, req CCVMSecondaryResizeReque
 }
 
 func callCCVMSecondaryResizeRemote(target string, req CCVMSecondaryResizeRequest, mode string) (CCVMSecondaryResizeResponse, error) {
+	return callCCVMSecondaryResizeRemoteWithGuest(target, req, mode, false)
+}
+
+func callCCVMSecondaryResizeGuestRemote(target string, req CCVMSecondaryResizeRequest, mode string) (CCVMSecondaryResizeResponse, error) {
+	return callCCVMSecondaryResizeRemoteWithGuest(target, req, mode, true)
+}
+
+func callCCVMSecondaryResizeRemoteWithGuest(target string, req CCVMSecondaryResizeRequest, mode string, guest bool) (CCVMSecondaryResizeResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return CCVMSecondaryResizeResponse{}, err
@@ -425,6 +529,9 @@ func callCCVMSecondaryResizeRemote(target string, req CCVMSecondaryResizeRequest
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set(ccvmSecondaryResizeLocalHeader, "1")
 	httpReq.Header.Set(ccvmSecondaryResizeModeHeader, mode)
+	if guest {
+		httpReq.Header.Set(ccvmSecondaryResizeGuestHeader, "1")
+	}
 
 	client := &http.Client{Timeout: ccvmSecondaryResizeRequestTO}
 	resp, err := client.Do(httpReq)
@@ -458,14 +565,22 @@ func ccvmSecondaryResizeGuestPing() error {
 }
 
 func ccvmSecondaryResizeGrowGuestFilesystem() error {
-	command := strings.Join([]string{
+	return ccvmSecondaryResizeGuestExec(ccvmSecondaryResizeGrowGuestFilesystemCommand(), ccvmSecondaryResizeTimeout)
+}
+
+func ccvmSecondaryResizeGrowGuestFilesystemDirect() error {
+	_, err := runCCVMSecondaryResizeCommand(ccvmSecondaryResizeTimeout, "/bin/sh", "-c", ccvmSecondaryResizeGrowGuestFilesystemCommand())
+	return err
+}
+
+func ccvmSecondaryResizeGrowGuestFilesystemCommand() string {
+	return strings.Join([]string{
 		"sgdisk -e /dev/vda",
 		"parted --script /dev/vda resizepart 3 100%",
 		"pvresize /dev/vda3",
 		"lvextend -l +100%FREE /dev/rl/nfs",
 		"xfs_growfs /nfs",
 	}, " && ")
-	return ccvmSecondaryResizeGuestExec(command, ccvmSecondaryResizeTimeout)
 }
 
 type ccvmSecondaryGuestExecResponse struct {

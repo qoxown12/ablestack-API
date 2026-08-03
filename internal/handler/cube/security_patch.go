@@ -42,7 +42,7 @@ const (
 //
 //	@Summary		Security Patch
 //	@Description	cluster.json 대상에 security_patch.sh를 로컬/SSH로 실행하거나 security_patch.status 값을 업데이트합니다.
-//	@Tags			CUBE - Security
+//	@Tags			Cube-Security
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.SecurityPatchRequest	true	"security patch request"

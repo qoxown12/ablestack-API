@@ -45,7 +45,8 @@ type Args struct {
 	ExcludeHostname    string
 	RemoveHostname     string
 	ExternalTimeserver string
-	IscsiStorage       string
+	StorageNetwork     string
+	InternalToken      string
 	Verbose            int
 	Human              bool
 }
@@ -80,7 +81,9 @@ type ApplyRequest struct {
 	ExcludeHostname    string            `json:"exclude_hostname"`
 	RemoveHostname     string            `json:"remove_hostname"`
 	ExternalTimeserver string            `json:"external_timeserver"`
-	IscsiStorage       string            `json:"iscsi_storage"`
+	StorageNetwork     string            `json:"storage_network"`
+	LegacyIscsiStorage string            `json:"iscsi_storage,omitempty"`
+	Security           map[string]string `json:"security,omitempty"`
 }
 
 // RunCLI executes the legacy CLI behavior.
@@ -112,7 +115,10 @@ func ApplyLocal(action string, req CubeModel.ClusterApplyRequest) (CubeModel.Clu
 		ExcludeHostname:    req.ExcludeHostname,
 		RemoveHostname:     req.RemoveHostname,
 		ExternalTimeserver: req.ExternalTimeserver,
-		IscsiStorage:       req.IscsiStorage,
+		StorageNetwork:     req.StorageNetwork,
+	}
+	if req.Security != nil {
+		args.InternalToken = strings.TrimSpace(req.Security.InternalToken)
 	}
 
 	result := applyArgs(args)
@@ -205,12 +211,12 @@ func parseArgs(argv []string) (Args, error) {
 			}
 			args.ExternalTimeserver = val
 			i = next
-		case token == "-is" || token == "--iscsi-storage":
+		case token == "-is" || token == "--storage-network" || token == "--iscsi-storage":
 			val, next, err := requireValue(argv, i)
 			if err != nil {
 				return args, err
 			}
-			args.IscsiStorage = val
+			args.StorageNetwork = val
 			i = next
 		case token == "-H" || token == "--Human":
 			args.Human = true
@@ -377,7 +383,7 @@ type orderedClusterConfig struct {
 	PCSCluster         map[string]any `json:"pcsCluster"`
 	Hosts              []any          `json:"hosts"`
 	ExternalTimeserver string         `json:"external_timeserver"`
-	IscsiStorage       string         `json:"iscsi_storage"`
+	StorageNetwork     string         `json:"storage_network"`
 }
 
 type orderedSystemProfile struct {
@@ -457,12 +463,7 @@ func NormalizeClusterJSON(root map[string]any) map[string]any {
 		mngtNic["dns"] = val
 	}
 	pcsCluster := ensureMap(cfg, "pcsCluster")
-	for i := 1; i <= 3; i++ {
-		key := fmt.Sprintf("hostname%d", i)
-		if _, ok := pcsCluster[key]; !ok {
-			pcsCluster[key] = ""
-		}
-	}
+	normalizePCSClusterMap(pcsCluster)
 
 	externalTimeserver := getString(cfg["external_timeserver"])
 	if externalTimeserver == "" {
@@ -472,7 +473,10 @@ func NormalizeClusterJSON(root map[string]any) map[string]any {
 			delete(cfg, "extenal_timeserver")
 		}
 	}
-
+	storageNetwork := getString(cfg["storage_network"])
+	if storageNetwork == "" {
+		storageNetwork = getString(cfg["iscsi_storage"])
+	}
 	ordered := orderedClusterConfig{
 		Type:               getString(cfg["type"]),
 		BackupPath:         getString(cfg["backup_path"]),
@@ -481,7 +485,7 @@ func NormalizeClusterJSON(root map[string]any) map[string]any {
 		PCSCluster:         pcsCluster,
 		Hosts:              buildOrderedHosts(cfg),
 		ExternalTimeserver: externalTimeserver,
-		IscsiStorage:       normalizeIscsiStorage(cfg["iscsi_storage"]),
+		StorageNetwork:     normalizeStorageNetwork(storageNetwork),
 	}
 
 	root["clusterConfig"] = ordered
@@ -490,7 +494,7 @@ func NormalizeClusterJSON(root map[string]any) map[string]any {
 	return root
 }
 
-func normalizeIscsiStorage(val any) string {
+func normalizeStorageNetwork(val any) string {
 	if strings.EqualFold(strings.TrimSpace(getString(val)), "true") {
 		return "true"
 	}
@@ -718,12 +722,108 @@ func updatePCSCluster(cfg map[string]any, pcsList []string) {
 		return
 	}
 	pcsCluster := ensureMap(cfg, "pcsCluster")
-	for i, value := range pcsList {
-		if value == "" {
-			continue
+	writePCSClusterValues(pcsCluster, pcsList)
+}
+
+func normalizePCSClusterMap(pcsCluster map[string]any) {
+	writePCSClusterValues(pcsCluster, collectPCSClusterValues(pcsCluster))
+}
+
+func collectPCSClusterValues(pcsCluster map[string]any) []string {
+	if pcsCluster == nil {
+		return nil
+	}
+	values := make([]string, 0, CubeModel.PCSClusterMaxHosts)
+	if raw, ok := pcsCluster["hostnames"]; ok {
+		values = append(values, pcsStringSliceFromAny(raw)...)
+	}
+	for i := 1; i <= CubeModel.PCSClusterMaxHosts; i++ {
+		if value, ok := pcsCluster[fmt.Sprintf("hostname%d", i)]; ok {
+			values = append(values, getString(value))
 		}
+	}
+	return CubeModel.NormalizePCSClusterList(values)
+}
+
+func writePCSClusterValues(pcsCluster map[string]any, values []string) {
+	if pcsCluster == nil {
+		return
+	}
+	clearPCSClusterValues(pcsCluster)
+	hostnames := CubeModel.NormalizePCSClusterList(values)
+	for i, value := range hostnames {
 		pcsCluster[fmt.Sprintf("hostname%d", i+1)] = value
 	}
+	for i := len(hostnames) + 1; i <= 3; i++ {
+		pcsCluster[fmt.Sprintf("hostname%d", i)] = ""
+	}
+	delete(pcsCluster, "hostnames")
+}
+
+func clearPCSClusterValues(pcsCluster map[string]any) {
+	for key := range pcsCluster {
+		if isPCSClusterHostnameKey(key) {
+			delete(pcsCluster, key)
+		}
+	}
+}
+
+func isPCSClusterHostnameKey(key string) bool {
+	if !strings.HasPrefix(key, "hostname") {
+		return false
+	}
+	index, err := strconv.Atoi(strings.TrimPrefix(key, "hostname"))
+	return err == nil && index > 0
+}
+
+func pcsStringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, getString(item))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func filterRemovedPCSClusterValues(values []string, host map[string]any) []string {
+	if len(values) == 0 || host == nil {
+		return values
+	}
+	removeValues := map[string]struct{}{}
+	for _, key := range []string{"hostname", "ablecube", "ablecubePn", "scvmMngt", "scvm", "scvmCn"} {
+		value := strings.ToLower(strings.TrimSpace(getString(host[key])))
+		if value != "" {
+			removeValues[value] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, remove := removeValues[strings.ToLower(strings.TrimSpace(value))]; remove {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func validatePCSClusterInput(args Args) error {
+	return CubeModel.ValidatePCSClusterList(args.PCSClusterList, minPCSClusterHostsForType(args.Type))
+}
+
+func minPCSClusterHostsForType(clusterType string) int {
+	if strings.EqualFold(strings.TrimSpace(clusterType), "ablestack-standalone") {
+		return 0
+	}
+	if isHCIClusterType(clusterType) {
+		return 3
+	}
+	return 1
 }
 
 func updateMngtNic(cfg map[string]any, args Args) {
@@ -747,10 +847,19 @@ func insert(clusterPath string, args Args) Result {
 	if err := applyNetworkFilter(); err != nil {
 		return resultError(err.Error())
 	}
+	if len(args.PCSClusterList) > 0 {
+		if err := validatePCSClusterInput(args); err != nil {
+			return resultError(err.Error())
+		}
+	}
 
 	root, cfg, err := loadClusterJSON(clusterPath)
 	if err != nil {
 		return resultError("cluster.json read error")
+	}
+	if strings.TrimSpace(args.InternalToken) != "" {
+		security := ensureMap(root, "security")
+		security["internal_token"] = strings.TrimSpace(args.InternalToken)
 	}
 
 	if args.Type != "" {
@@ -783,21 +892,21 @@ func insert(clusterPath string, args Args) Result {
 						host["index"] = param.Index
 						host["hostname"] = param.Hostname
 						host["ablecube"] = param.Ablecube
-						if args.IscsiStorage != "" && strings.EqualFold(args.IscsiStorage, "true") {
+						if args.StorageNetwork != "" && strings.EqualFold(args.StorageNetwork, "true") {
 							host["ablecubePn"] = param.AblecubePn
 						}
 						matched = true
 						break
 					}
 				}
-				if args.IscsiStorage != "" {
+				if args.StorageNetwork != "" {
 					if !matched {
 						newHost := map[string]any{
 							"index":    param.Index,
 							"hostname": param.Hostname,
 							"ablecube": param.Ablecube,
 						}
-						if strings.EqualFold(args.IscsiStorage, "true") {
+						if strings.EqualFold(args.StorageNetwork, "true") {
 							newHost["ablecubePn"] = param.AblecubePn
 						}
 						hosts = append(hosts, newHost)
@@ -806,8 +915,8 @@ func insert(clusterPath string, args Args) Result {
 			}
 			setHosts(cfg, hosts)
 		}
-		if args.IscsiStorage != "" {
-			cfg["iscsi_storage"] = args.IscsiStorage
+		if args.StorageNetwork != "" {
+			cfg["storage_network"] = args.StorageNetwork
 		}
 	} else {
 		if args.JSONString != "" {
@@ -871,8 +980,8 @@ func insertScvmHost(clusterPath string, args Args) Result {
 	if args.CCVMMngtIP == "" {
 		return resultError("ccvm mngt ip required")
 	}
-	if len(args.PCSClusterList) == 0 {
-		return resultError("pcs cluster list required")
+	if err := validatePCSClusterInput(args); err != nil {
+		return resultError(err.Error())
 	}
 
 	params, err := parseHostParams(args.JSONString)
@@ -906,11 +1015,11 @@ func insertAllHost(clusterPath string, args Args) Result {
 	if args.CCVMMngtIP == "" {
 		return resultError("ccvm mngt ip required")
 	}
-	if len(args.PCSClusterList) == 0 {
-		return resultError("pcs cluster list required")
+	if err := validatePCSClusterInput(args); err != nil {
+		return resultError(err.Error())
 	}
-	if !strings.EqualFold(args.Type, "ablestack-hci") && args.IscsiStorage == "" {
-		return resultError("iscsi storage required")
+	if !strings.EqualFold(args.Type, "ablestack-hci") && args.StorageNetwork == "" {
+		return resultError("storage network required")
 	}
 
 	params, err := parseHostParams(args.JSONString)
@@ -968,13 +1077,10 @@ func removeHost(clusterPath string, args Args) Result {
 	}
 
 	if found >= 0 {
-		targetIP := getString(target["ablecube"])
 		pcs := ensureMap(cfg, "pcsCluster")
-		for key, value := range pcs {
-			if getString(value) == targetIP {
-				pcs[key] = ""
-			}
-		}
+		targetIP := getString(target["ablecube"])
+		filteredPCS := filterRemovedPCSClusterValues(collectPCSClusterValues(pcs), target)
+		writePCSClusterValues(pcs, filteredPCS)
 
 		if isHCIClusterType(args.Type) {
 			removeIPs := map[string]bool{
@@ -1091,12 +1197,10 @@ func resetClusterConfig(clusterPath string) Result {
 	delete(cfg, "extenal_timeserver")
 
 	pcs := ensureMap(cfg, "pcsCluster")
-	for i := 1; i <= 3; i++ {
-		pcs[fmt.Sprintf("hostname%d", i)] = ""
-	}
+	writePCSClusterValues(pcs, nil)
 
 	cfg["hosts"] = []any{}
-	cfg["iscsi_storage"] = "false"
+	cfg["storage_network"] = "false"
 
 	if err := saveClusterJSON(clusterPath, root); err != nil {
 		return resultError(err.Error())
@@ -1170,19 +1274,19 @@ func changeHosts(args Args, cfg map[string]any) Result {
 				hostName:   true,
 				ablecubeIP: true,
 			}
-			if strings.EqualFold(args.IscsiStorage, "true") {
+			if strings.EqualFold(args.StorageNetwork, "true") {
 				removeNames[ablecubePnIP] = true
 			}
 			lines = filterHostsLines(lines, nil, removeNames)
 
 			if hostname == hostName {
 				lines = append(lines, formatHostsEntry(ablecubeIP, []string{hostName, "ablecube"}))
-				if strings.EqualFold(args.IscsiStorage, "true") {
+				if strings.EqualFold(args.StorageNetwork, "true") {
 					lines = append(lines, formatHostsEntry(ablecubePnIP, []string{"pn-ablecube" + index, "pn-ablecube"}))
 				}
 			} else {
 				lines = append(lines, formatHostsEntry(ablecubeIP, []string{hostName}))
-				if strings.EqualFold(args.IscsiStorage, "true") {
+				if strings.EqualFold(args.StorageNetwork, "true") {
 					lines = append(lines, formatHostsEntry(ablecubePnIP, []string{"pn-ablecube" + index}))
 				}
 			}
@@ -1368,7 +1472,7 @@ func checkAPITarget(host string) error {
 		return errors.New("empty host")
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("%s/api/v1/cube/cluster/health", buildTargetURL(host))
+	url := fmt.Sprintf("%s/api/v1/health", buildTargetURL(host))
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -1405,7 +1509,10 @@ func callApplyLocalAPI(target string, action string, args Args) (Result, error) 
 		ExcludeHostname:    args.ExcludeHostname,
 		RemoveHostname:     args.RemoveHostname,
 		ExternalTimeserver: args.ExternalTimeserver,
-		IscsiStorage:       args.IscsiStorage,
+		StorageNetwork:     args.StorageNetwork,
+	}
+	if strings.TrimSpace(args.InternalToken) != "" {
+		req.Security = map[string]string{"internal_token": strings.TrimSpace(args.InternalToken)}
 	}
 
 	body, err := json.Marshal(req)

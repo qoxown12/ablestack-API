@@ -29,6 +29,11 @@ type Errorlog struct {
 } // @name Errorlog
 
 type TypeVersion struct {
-	Version string `json:"version,omitempty"`
-	Debug   bool   `json:"debug,omitempty"`
+	OSVersion                string   `json:"os_version,omitempty"`
+	KernelVersion            string   `json:"kernel_version,omitempty"`
+	CockpitVersion           string   `json:"cockpit_version,omitempty"`
+	MoldVersion              string   `json:"mold_version,omitempty"`
+	GlueVersion              string   `json:"glue_version,omitempty"`
+	AbleStackPackageVersions []string `json:"ablestack_package_versions,omitempty"`
+	Debug                    bool     `json:"debug,omitempty"`
 }

@@ -44,7 +44,7 @@ const (
 //
 //	@Summary		CCVM DB Dump
 //	@Description	CCVM의 cloud DB dump 생성, 백업/삭제 스케줄 설정, 조회, 비활성화를 수행합니다.
-//	@Tags			CUBE - DB
+//	@Tags			Cube-DB
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.DBDumpRequest	true	"db dump request"

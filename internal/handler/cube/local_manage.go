@@ -36,7 +36,7 @@ const (
 //
 //	@Summary		Local Disk Manage
 //	@Description	standalone 환경의 로컬 디스크를 생성, 조회, 초기화합니다. 로컬 전용 API이며 SSH를 사용하지 않습니다.
-//	@Tags			CUBE - Local
+//	@Tags			Cube-Local
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.LocalManageRequest	true	"local manage request"

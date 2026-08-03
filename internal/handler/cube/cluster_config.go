@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"ablecloud.io/ablestack-api/internal/service/clusterconfig"
+	"ablecloud.io/ablestack-api/internal/service/security"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,28 +28,33 @@ type ClusterHealthTargetResult = CubeModel.ClusterHealthTargetResult
 // ClusterHealth godoc
 //
 //	@Summary		Cluster Health
-//	@Description	API 서버 생존 확인 및 대상 노드 상태 확인
-//	@Tags			CUBE - Cluster
+//	@Description	API 서버 생존 확인 및 대상 노드 상태 확인. option은 host,scvm,ccvm을 콤마로 여러 개 지정할 수 있습니다. target_hostname은 role별 표시 이름을 콤마로 지정합니다(host는 hosts[].hostname, scvm은 scvm1/scvm2, ccvm은 ccvm). option 없이 target_hostname만 지정하면 이름으로 role을 추론합니다.
+//	@Tags			Cube-Cluster
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
-//	@Param			option			query	string	false	"host|scvm|ccvm"
-//	@Param			target_hostname	query	string	false	"comma-separated hostnames"
+//	@Param			option			query	string	false	"host,scvm,ccvm"
+//	@Param			target_hostname	query	string	false	"comma-separated role names"
 //	@Success		200	{object}	CubeModel.ClusterHealthResponse
 //	@Router			/cube/cluster/health [get]
 func ClusterHealth(context *gin.Context) {
 	option := strings.TrimSpace(context.Query("option"))
-	if option == "" {
+	targetHostnames := parseTargetHostnames(context.Query("target_hostname"))
+	if option == "" && len(targetHostnames) == 0 {
 		context.JSON(http.StatusOK, ClusterHealthResponse{Status: "ok"})
 		return
 	}
 
-	option = normalizeHealthOption(option)
-	if option == "" {
-		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
-			ErrCode: http.StatusBadRequest,
-			Message: "invalid option",
-		})
-		return
+	var options []string
+	if option != "" {
+		var err error
+		options, err = normalizeHealthOptions(option)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
+				ErrCode: http.StatusBadRequest,
+				Message: err.Error(),
+			})
+			return
+		}
 	}
 
 	cfg, err := loadClusterConfigSection()
@@ -59,8 +66,7 @@ func ClusterHealth(context *gin.Context) {
 		return
 	}
 
-	targetHostnames := parseTargetHostnames(context.Query("target_hostname"))
-	targets, err := buildHealthTargets(option, cfg, targetHostnames)
+	targets, err := buildHealthTargets(options, cfg, targetHostnames)
 	if err != nil {
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
@@ -105,18 +111,31 @@ type healthTarget struct {
 	Target   string
 }
 
-// normalizeHealthOption은 health 조회 옵션을 host/scvm/ccvm 중 하나로 정규화한다.
-func normalizeHealthOption(option string) string {
-	switch strings.ToLower(strings.TrimSpace(option)) {
-	case "host":
-		return "host"
-	case "scvm":
-		return "scvm"
-	case "ccvm":
-		return "ccvm"
-	default:
-		return ""
+// normalizeHealthOptions는 health 조회 옵션을 host/scvm/ccvm 목록으로 정규화한다.
+func normalizeHealthOptions(raw string) ([]string, error) {
+	parts := strings.Split(raw, ",")
+	options := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		option := strings.ToLower(strings.TrimSpace(part))
+		if option == "" {
+			continue
+		}
+		switch option {
+		case "host", "scvm", "ccvm":
+		default:
+			return nil, fmt.Errorf("invalid option")
+		}
+		if _, ok := seen[option]; ok {
+			continue
+		}
+		seen[option] = struct{}{}
+		options = append(options, option)
 	}
+	if len(options) == 0 {
+		return nil, fmt.Errorf("invalid option")
+	}
+	return options, nil
 }
 
 // parseTargetHostnames는 콤마로 전달된 hostname 목록을 정리해 반환한다.
@@ -137,70 +156,147 @@ func parseTargetHostnames(raw string) []string {
 	return dedupeHosts(out)
 }
 
-// buildHealthTargets는 옵션과 hostname 필터에 맞는 health 점검 대상 목록을 만든다.
-func buildHealthTargets(option string, cfg *CubeModel.ClusterConfigSection, targetHostnames []string) ([]healthTarget, error) {
-	var hosts []CubeModel.ClusterHost
-	if len(targetHostnames) == 0 {
-		hosts = cfg.Hosts
-	} else {
-		hostMap := map[string]CubeModel.ClusterHost{}
-		for _, host := range cfg.Hosts {
-			if strings.TrimSpace(host.Hostname) == "" {
-				continue
+// buildHealthTargets는 옵션과 이름 필터에 맞는 health 점검 대상 목록을 만든다.
+func buildHealthTargets(options []string, cfg *CubeModel.ClusterConfigSection, targetHostnames []string) ([]healthTarget, error) {
+	if len(options) == 0 {
+		return buildHealthTargetsByName(cfg, targetHostnames)
+	}
+	targets := make([]healthTarget, 0)
+	for _, option := range options {
+		switch option {
+		case "host":
+			targets = append(targets, buildHostHealthTargets(cfg.Hosts, targetHostnames)...)
+		case "scvm":
+			if !isHCITarget(cfg.Type) {
+				return nil, fmt.Errorf("unsupported cluster type")
 			}
-			hostMap[strings.TrimSpace(host.Hostname)] = host
-		}
-		for _, name := range targetHostnames {
-			host, ok := hostMap[name]
-			if !ok {
-				continue
+			targets = append(targets, buildSCVMHealthTargets(cfg.Hosts, targetHostnames)...)
+		case "ccvm":
+			target, ok, err := buildCCVMHealthTarget(cfg, targetHostnames)
+			if err != nil {
+				return nil, err
 			}
-			hosts = append(hosts, host)
-		}
-		if len(hosts) == 0 {
-			return nil, fmt.Errorf("target_hostname not found")
+			if ok {
+				targets = append(targets, target)
+			}
 		}
 	}
+	targets = dedupeHealthTargets(targets)
+	if len(targets) == 0 && len(targetHostnames) > 0 {
+		return nil, fmt.Errorf("target_hostname not found")
+	}
+	return targets, nil
+}
 
-	targets := make([]healthTarget, 0)
-	switch option {
-	case "host":
-		for _, host := range hosts {
-			if strings.TrimSpace(host.Ablecube) == "" {
-				continue
+func buildHealthTargetsByName(cfg *CubeModel.ClusterConfigSection, targetNames []string) ([]healthTarget, error) {
+	targets := make([]healthTarget, 0, len(targetNames))
+	for _, targetName := range targetNames {
+		switch {
+		case strings.EqualFold(strings.TrimSpace(targetName), "ccvm"):
+			target, ok, err := buildCCVMHealthTarget(cfg, []string{targetName})
+			if err != nil {
+				return nil, err
 			}
-			targets = append(targets, healthTarget{
-				Role:     "host",
-				Hostname: host.Hostname,
-				Target:   strings.TrimSpace(host.Ablecube),
-			})
-		}
-	case "scvm":
-		if !isHCITarget(cfg.Type) {
-			return nil, fmt.Errorf("unsupported cluster type")
-		}
-		for _, host := range hosts {
-			if strings.TrimSpace(host.ScvmMngt) == "" {
-				continue
+			if ok {
+				targets = append(targets, target)
 			}
-			targets = append(targets, healthTarget{
-				Role:     "scvm",
-				Hostname: host.Hostname,
-				Target:   strings.TrimSpace(host.ScvmMngt),
-			})
+		case isSCVMHealthTargetName(targetName):
+			if !isHCITarget(cfg.Type) {
+				return nil, fmt.Errorf("unsupported cluster type")
+			}
+			targets = append(targets, buildSCVMHealthTargets(cfg.Hosts, []string{targetName})...)
+		default:
+			targets = append(targets, buildHostHealthTargets(cfg.Hosts, []string{targetName})...)
 		}
-	case "ccvm":
-		if strings.TrimSpace(cfg.CCVM.IP) == "" {
-			return nil, fmt.Errorf("ccvm ip required")
+	}
+	targets = dedupeHealthTargets(targets)
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("target_hostname not found")
+	}
+	return targets, nil
+}
+
+func buildHostHealthTargets(hosts []CubeModel.ClusterHost, targetNames []string) []healthTarget {
+	targets := make([]healthTarget, 0, len(hosts))
+	for _, host := range hosts {
+		name := strings.TrimSpace(host.Hostname)
+		if name == "" || strings.TrimSpace(host.Ablecube) == "" || !matchHealthTargetName(name, targetNames) {
+			continue
 		}
 		targets = append(targets, healthTarget{
-			Role:   "ccvm",
-			Target: strings.TrimSpace(cfg.CCVM.IP),
+			Role:     "host",
+			Hostname: name,
+			Target:   strings.TrimSpace(host.Ablecube),
 		})
 	}
+	return targets
+}
 
-	targets = dedupeHealthTargets(targets)
-	return targets, nil
+func buildSCVMHealthTargets(hosts []CubeModel.ClusterHost, targetNames []string) []healthTarget {
+	targets := make([]healthTarget, 0, len(hosts))
+	for _, host := range hosts {
+		name := scvmHealthName(host)
+		if name == "" || strings.TrimSpace(host.ScvmMngt) == "" || !matchHealthTargetName(name, targetNames) {
+			continue
+		}
+		targets = append(targets, healthTarget{
+			Role:     "scvm",
+			Hostname: name,
+			Target:   strings.TrimSpace(host.ScvmMngt),
+		})
+	}
+	return targets
+}
+
+func buildCCVMHealthTarget(cfg *CubeModel.ClusterConfigSection, targetNames []string) (healthTarget, bool, error) {
+	if strings.TrimSpace(cfg.CCVM.IP) == "" {
+		return healthTarget{}, false, fmt.Errorf("ccvm ip required")
+	}
+	if !matchHealthTargetName("ccvm", targetNames) {
+		return healthTarget{}, false, nil
+	}
+	return healthTarget{
+		Role:     "ccvm",
+		Hostname: "ccvm",
+		Target:   strings.TrimSpace(cfg.CCVM.IP),
+	}, true, nil
+}
+
+func scvmHealthName(host CubeModel.ClusterHost) string {
+	index := strings.TrimSpace(host.Index)
+	if index == "" {
+		return ""
+	}
+	return "scvm" + index
+}
+
+func isSCVMHealthTargetName(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !strings.HasPrefix(name, "scvm") {
+		return false
+	}
+	index := strings.TrimPrefix(name, "scvm")
+	if index == "" {
+		return false
+	}
+	for _, r := range index {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func matchHealthTargetName(name string, targetNames []string) bool {
+	if len(targetNames) == 0 {
+		return true
+	}
+	for _, targetName := range targetNames {
+		if strings.EqualFold(strings.TrimSpace(targetName), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // dedupeHealthTargets는 role/hostname/target 조합 기준으로 health 대상을 중복 제거한다.
@@ -240,13 +336,13 @@ func checkHealthTargets(targets []healthTarget) []ClusterHealthTargetResult {
 	return results
 }
 
-// callHealthTarget은 원격 노드의 cluster health API를 호출한다.
+// callHealthTarget은 원격 노드의 public health API를 호출한다.
 func callHealthTarget(client *http.Client, target string) error {
 	if strings.TrimSpace(target) == "" {
 		return fmt.Errorf("empty target")
 	}
 	baseURL := buildTargetURL(target)
-	url := fmt.Sprintf("%s/api/v1/cube/cluster/health", baseURL)
+	url := fmt.Sprintf("%s/api/v1/health", baseURL)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -266,17 +362,17 @@ func callHealthTarget(client *http.Client, target string) error {
 // GetClusterConfig godoc
 //
 //	@Summary		Show Cluster Config
-//	@Description	cluster.json의 clusterConfig만 반환합니다.
-//	@Tags			CUBE - Cluster
+//	@Description	cluster.json 다운로드에 필요한 clusterConfig와 security를 반환합니다. systemProfile은 제외합니다.
+//	@Tags			Cube-Cluster
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
-//	@Success		200	{object}	CubeModel.ClusterConfigSection
+//	@Success		200	{object}	CubeModel.ClusterConfigResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		404	{object}	HTTP404NotFound
 //	@Failure		500	{object}	HTTP500InternalServerError
 //	@Router			/cube/cluster/config [get]
 func GetClusterConfig(context *gin.Context) {
-	cfg, err := loadClusterConfigSection()
+	root, err := loadClusterJSONRoot()
 	if err != nil {
 		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
 			ErrCode: http.StatusInternalServerError,
@@ -284,17 +380,75 @@ func GetClusterConfig(context *gin.Context) {
 		})
 		return
 	}
-	context.IndentedJSON(http.StatusOK, cfg)
+
+	resp, err := buildClusterConfigResponse(root)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
+			ErrCode: http.StatusInternalServerError,
+			Message: err.Error(),
+		})
+		return
+	}
+	context.IndentedJSON(http.StatusOK, resp)
+}
+
+func buildClusterConfigResponse(root map[string]any) (CubeModel.ClusterConfigResponse, error) {
+	ensuredToken := ""
+	if strings.TrimSpace(clusterConfigRootInternalToken(root)) == "" {
+		token, _, err := security.EnsureInternalToken()
+		if err != nil {
+			return CubeModel.ClusterConfigResponse{}, err
+		}
+		ensuredToken = strings.TrimSpace(token)
+		if refreshed, err := loadClusterJSONRoot(); err == nil {
+			root = refreshed
+		}
+	}
+
+	normalized := clusterconfig.NormalizeClusterJSON(root)
+	if ensuredToken != "" && strings.TrimSpace(clusterConfigRootInternalToken(normalized)) == "" {
+		securityMap := ensureMap(normalized, "security")
+		securityMap["internal_token"] = ensuredToken
+	}
+
+	rawConfig, err := json.Marshal(normalized["clusterConfig"])
+	if err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+	rawSecurity, err := json.Marshal(normalized["security"])
+	if err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+
+	var resp CubeModel.ClusterConfigResponse
+	if err := json.Unmarshal(rawConfig, &resp.ClusterConfig); err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+	if err := json.Unmarshal(rawSecurity, &resp.Security); err != nil {
+		return CubeModel.ClusterConfigResponse{}, err
+	}
+	return resp, nil
+}
+
+func clusterConfigRootInternalToken(root map[string]any) string {
+	if root == nil {
+		return ""
+	}
+	securityMap, ok := root["security"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(securityMap["internal_token"]))
 }
 
 // ApplyClusterConfig godoc
 //
 //	@Summary		Apply Cluster Config (Orchestrator)
-//	@Description	입력된 hosts 수만큼 각 노드 API로 fan-out 호출합니다.
-//	@Tags			CUBE - Cluster
+//	@Description	입력된 hosts 수만큼 각 노드 API로 fan-out 호출합니다. insert 적용 시 각 노드에서 시간 서버 설정도 함께 적용합니다.
+//	@Tags			Cube-Cluster
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","iscsi_storage":""})
+//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","storage_network":""})
 //	@Success		200	{object}	CubeModel.ClusterApplyResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		404	{object}	HTTP404NotFound
@@ -338,7 +492,7 @@ func ApplyClusterConfig(context *gin.Context) {
 		})
 		return
 	}
-	if err := requirePCSClusterList(req.Action, req.PCSClusterList); err != nil {
+	if err := requirePCSClusterList(req); err != nil {
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
 			Message: err.Error(),
@@ -356,6 +510,13 @@ func ApplyClusterConfig(context *gin.Context) {
 		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
 			ErrCode: http.StatusInternalServerError,
 			Message: "failed to read cluster.json",
+		})
+		return
+	}
+	if err := ensureClusterInternalToken(&req); err != nil {
+		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
+			ErrCode: http.StatusInternalServerError,
+			Message: err.Error(),
 		})
 		return
 	}
@@ -425,14 +586,39 @@ func ApplyClusterConfig(context *gin.Context) {
 	context.JSON(http.StatusOK, resp)
 }
 
+func ensureClusterInternalToken(req *ClusterConfigApplyRequest) error {
+	if req == nil || !isInsertAction(req.Action) {
+		return nil
+	}
+	if req.Security != nil {
+		if token := strings.TrimSpace(req.Security.InternalToken); token != "" {
+			req.Security.InternalToken = token
+			return security.SetInternalToken(token)
+		}
+	}
+	token, _, err := security.EnsureInternalToken()
+	if err != nil {
+		return err
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil
+	}
+	if req.Security == nil {
+		req.Security = &CubeModel.ClusterSecurityConfig{}
+	}
+	req.Security.InternalToken = token
+	return nil
+}
+
 // ApplyClusterConfigLocal godoc
 //
 //	@Summary		Apply Cluster Config (Local)
-//	@Description	로컬 노드에서만 cluster_config CLI를 실행합니다.
-//	@Tags			CUBE - Cluster
+//	@Description	로컬 노드에서만 cluster_config CLI를 실행합니다. insert 적용 시 시간 서버 설정도 함께 적용합니다.
+//	@Tags			Cube-Cluster
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","iscsi_storage":""})
+//	@Param			body	body		CubeModel.ClusterApplyRequest	true	"apply request"\texample({"action":"","option":"","type":"","ccvm":{"ip":""},"mngtNic":{"cidr":"","gw":"","dns":""},"pcs_cluster_list":[],"hosts":[{"index":"","hostname":"","ablecube":"","scvmMngt":"","ablecubePn":"","scvm":"","scvmCn":""}],"exclude_hostname":"","remove_hostname":"","new_hostname":"","external_timeserver":"","storage_network":""})
 //	@Success		200	{object}	CubeModel.ClusterApplyLocalResponse
 //	@Failure		400	{object}	HTTP400BadRequest
 //	@Failure		404	{object}	HTTP404NotFound
@@ -469,7 +655,7 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 		})
 		return
 	}
-	if err := requirePCSClusterList(req.Action, req.PCSClusterList); err != nil {
+	if err := requirePCSClusterList(req); err != nil {
 		context.JSON(http.StatusBadRequest, utils.HTTP400BadRequest{
 			ErrCode: http.StatusBadRequest,
 			Message: err.Error(),
@@ -487,6 +673,13 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
 			ErrCode: http.StatusInternalServerError,
 			Message: "failed to read cluster.json",
+		})
+		return
+	}
+	if err := ensureClusterInternalToken(&req); err != nil {
+		context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
+			ErrCode: http.StatusInternalServerError,
+			Message: err.Error(),
 		})
 		return
 	}
@@ -509,7 +702,14 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 		})
 		return
 	}
-	if isInsertAction(req.Action) {
+	if isInsertAction(req.Action) && result.Code == http.StatusOK {
+		if _, err := applyTimeServerConfig(TimeServerRequest{}); err != nil {
+			context.JSON(http.StatusInternalServerError, utils.HTTP500InternalServerError{
+				ErrCode: http.StatusInternalServerError,
+				Message: "time server configure failed: " + err.Error(),
+			})
+			return
+		}
 		scheduleSSHKnownHostsScan()
 	}
 	context.JSON(http.StatusOK, result)
@@ -517,7 +717,8 @@ func ApplyClusterConfigLocal(context *gin.Context) {
 
 // UpdateClusterConfig는 전역 cluster config 모델을 현재 cluster.json 기준으로 갱신한다.
 func UpdateClusterConfig() {
-	_ = updateClusterConfig(CubeModel.ClusterConfig())
+	err := updateClusterConfig(CubeModel.ClusterConfig())
+	logging.RecordJobResult("cube.UpdateClusterConfig", err, map[string]any{"path": resolveClusterJSONPath()})
 }
 
 // updateClusterConfig는 cluster.json 파일을 읽어 메모리 모델에 반영한다.
@@ -914,12 +1115,25 @@ func shouldIncludeCcvm(req ClusterConfigApplyRequest) bool {
 }
 
 // requirePCSClusterList는 insert 계열 요청에 pcs cluster list가 필요한지 검증한다.
-func requirePCSClusterList(action string, list []string) error {
-	action = strings.ToLower(strings.TrimSpace(action))
-	if strings.HasPrefix(action, "insert") && !hasNonEmptyPCSList(list) {
-		return fmt.Errorf("pcs_cluster_list required")
+func requirePCSClusterList(req ClusterConfigApplyRequest) error {
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	if strings.HasPrefix(action, "insert") {
+		minHosts := minPCSClusterHostsForType(req.Type)
+		if err := CubeModel.ValidatePCSClusterList(req.PCSClusterList, minHosts); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func minPCSClusterHostsForType(clusterType string) int {
+	if strings.EqualFold(strings.TrimSpace(clusterType), "ablestack-standalone") {
+		return 0
+	}
+	if isHCITarget(clusterType) {
+		return 3
+	}
+	return 1
 }
 
 // requireInsertFields는 insert 요청에 필요한 필수 필드가 모두 있는지 검증한다.
@@ -933,18 +1147,8 @@ func requireInsertFields(req ClusterConfigApplyRequest) error {
 	if req.CCVM == nil || strings.TrimSpace(req.CCVM.IP) == "" {
 		return fmt.Errorf("ccvm required")
 	}
-	if strings.TrimSpace(req.IscsiStorage) == "" {
-		return fmt.Errorf("iscsi_storage required")
+	if strings.TrimSpace(req.StorageNetwork) == "" {
+		return fmt.Errorf("storage_network required")
 	}
 	return nil
-}
-
-// hasNonEmptyPCSList는 pcs cluster list에 비어 있지 않은 값이 하나라도 있는지 확인한다.
-func hasNonEmptyPCSList(list []string) bool {
-	for _, value := range list {
-		if strings.TrimSpace(value) != "" {
-			return true
-		}
-	}
-	return false
 }

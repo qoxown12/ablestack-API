@@ -28,9 +28,25 @@ type GFSDiskDevice struct {
 	LVM        string   `json:"lvm"`
 	Mountpoint string   `json:"mountpoint"`
 	Size       string   `json:"size"`
+	Used       string   `json:"used"`
+	Avail      string   `json:"avail"`
+	UsePercent string   `json:"use_percent"`
 	Multipaths []string `json:"multipaths"`
 	Devices    []string `json:"devices"`
 	DiskID     []string `json:"disk_id,omitempty"`
+}
+
+const gfsDiskUsageNA = "N/A"
+
+// GFSDiskUsage는 df 출력에서 읽은 GFS2 마운트 사용량이다.
+// @name GFSDiskUsage
+type GFSDiskUsage struct {
+	Filesystem string `json:"filesystem"`
+	Mountpoint string `json:"mountpoint"`
+	Size       string `json:"size"`
+	Used       string `json:"used"`
+	Avail      string `json:"avail"`
+	UsePercent string `json:"use_percent"`
 }
 
 // GFSMount는 /proc/self/mounts에서 읽은 GFS2 마운트 정보이다.
@@ -110,7 +126,7 @@ func HasGFSMultipathDevice(devices []GFSBlockDevice) bool {
 }
 
 // BuildGFSDiskStatus는 GFS2 마운트, lsblk 트리, by-id 맵으로 API 응답 값을 만든다.
-func BuildGFSDiskStatus(devices []GFSBlockDevice, mounts []GFSMount, osType string, multipathMode bool, diskIDByKname map[string][]string) GFSDiskStatusValue {
+func BuildGFSDiskStatus(devices []GFSBlockDevice, mounts []GFSMount, osType string, multipathMode bool, diskIDByKname map[string][]string, usageByMountpoint map[string]GFSDiskUsage) GFSDiskStatusValue {
 	mode := "single"
 	if multipathMode {
 		mode = "multi"
@@ -119,7 +135,7 @@ func BuildGFSDiskStatus(devices []GFSBlockDevice, mounts []GFSMount, osType stri
 	candidates := collectGFSDiskCandidates(devices, mounts, osType, multipathMode, diskIDByKname)
 	return GFSDiskStatusValue{
 		Mode:         mode,
-		Blockdevices: groupGFSDiskCandidates(candidates, multipathMode),
+		Blockdevices: groupGFSDiskCandidates(candidates, multipathMode, usageByMountpoint),
 	}
 }
 
@@ -210,7 +226,7 @@ func buildGFSDiskCandidate(node GFSBlockDevice, ancestors []GFSBlockDevice, moun
 	}
 }
 
-func groupGFSDiskCandidates(candidates []gfsDiskCandidate, multipathMode bool) []GFSDiskDevice {
+func groupGFSDiskCandidates(candidates []gfsDiskCandidate, multipathMode bool, usageByMountpoint map[string]GFSDiskUsage) []GFSDiskDevice {
 	type acc struct {
 		item GFSDiskDevice
 	}
@@ -251,12 +267,84 @@ func groupGFSDiskCandidates(candidates []gfsDiskCandidate, multipathMode bool) [
 	out := make([]GFSDiskDevice, 0, len(order))
 	for _, key := range order {
 		item := grouped[key].item
+		item = applyGFSDiskUsage(item, usageByMountpoint)
 		sort.Strings(item.Multipaths)
 		sort.Strings(item.Devices)
 		sort.Strings(item.DiskID)
 		out = append(out, item)
 	}
 	return out
+}
+
+// ParseGFSDiskUsageDF는 `df -hP` 출력을 mountpoint 기준 사용량 맵으로 파싱한다.
+func ParseGFSDiskUsageDF(data []byte) map[string]GFSDiskUsage {
+	out := map[string]GFSDiskUsage{}
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 6 || strings.EqualFold(fields[0], "Filesystem") {
+			continue
+		}
+		mountpoint := strings.Join(fields[5:], " ")
+		usage := GFSDiskUsage{
+			Filesystem: fields[0],
+			Size:       fields[1],
+			Used:       fields[2],
+			Avail:      fields[3],
+			UsePercent: fields[4],
+			Mountpoint: mountpoint,
+		}
+		out[mountpoint] = usage
+		cleanMountpoint := filepath.Clean(mountpoint)
+		if cleanMountpoint != mountpoint {
+			out[cleanMountpoint] = usage
+		}
+	}
+	return out
+}
+
+func applyGFSDiskUsage(item GFSDiskDevice, usageByMountpoint map[string]GFSDiskUsage) GFSDiskDevice {
+	usage, ok := lookupGFSDiskUsage(item.Mountpoint, usageByMountpoint)
+	if !ok {
+		return fillGFSDiskUsageDefaults(item)
+	}
+	if strings.TrimSpace(usage.Size) != "" {
+		item.Size = strings.TrimSpace(usage.Size)
+	}
+	item.Used = defaultGFSDiskUsageValue(usage.Used)
+	item.Avail = defaultGFSDiskUsageValue(usage.Avail)
+	item.UsePercent = defaultGFSDiskUsageValue(usage.UsePercent)
+	return fillGFSDiskUsageDefaults(item)
+}
+
+func lookupGFSDiskUsage(mountpoint string, usageByMountpoint map[string]GFSDiskUsage) (GFSDiskUsage, bool) {
+	if len(usageByMountpoint) == 0 {
+		return GFSDiskUsage{}, false
+	}
+	if usage, ok := usageByMountpoint[mountpoint]; ok {
+		return usage, true
+	}
+	cleanMountpoint := filepath.Clean(mountpoint)
+	usage, ok := usageByMountpoint[cleanMountpoint]
+	return usage, ok
+}
+
+func fillGFSDiskUsageDefaults(item GFSDiskDevice) GFSDiskDevice {
+	item.Used = defaultGFSDiskUsageValue(item.Used)
+	item.Avail = defaultGFSDiskUsageValue(item.Avail)
+	item.UsePercent = defaultGFSDiskUsageValue(item.UsePercent)
+	return item
+}
+
+func defaultGFSDiskUsageValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return gfsDiskUsageNA
+	}
+	return value
 }
 
 func nearestGFSMultipathNode(node GFSBlockDevice, ancestors []GFSBlockDevice) (GFSBlockDevice, bool) {

@@ -29,6 +29,7 @@ const (
 	gfsManageShortTimeout     = 30 * time.Second
 	gfsManageLVMConfPath      = "/etc/lvm/lvm.conf"
 	gfsManageAlertLogPath     = "/var/log/pcmk_alert_file.log"
+	gfsManageAlertDetailPath  = "/var/log/pcmk_alert_detail.log"
 	gfsManageHCIFilesystem    = "ablestack-hci-filesystem"
 	gfsManageResourceCleanup  = "resource-cleanup"
 	gfsManagePrepareAlertFile = "prepare-alert-file"
@@ -71,7 +72,7 @@ type gfsManageDevicePaths struct {
 //
 //	@Summary		GFS Manage
 //	@Description	GFS/PCS 로컬 작업을 수행하거나 cluster.json hosts[].ablecube 대상 API로 fan-out 합니다. SSH는 사용하지 않습니다.
-//	@Tags			CUBE - GFS
+//	@Tags			Cube-GFS
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.GFSManageRequest	true	"gfs manage request"
@@ -897,17 +898,26 @@ func runGFSManageIPMICheck(devices []GFSManageStonithDevice) (any, error) {
 }
 
 func prepareGFSManageAlertFile() error {
-	file, err := os.OpenFile(gfsManageAlertLogPath, os.O_CREATE, 0600)
+	for _, path := range []string{gfsManageAlertLogPath, gfsManageAlertDetailPath} {
+		if err := prepareGFSManageAlertLogFile(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func prepareGFSManageAlertLogFile(path string) error {
+	file, err := os.OpenFile(path, os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
 	if err := file.Close(); err != nil {
 		return err
 	}
-	if _, err := runGFSManageCommand(gfsManageShortTimeout, "chown", "hacluster:haclient", gfsManageAlertLogPath); err != nil {
+	if _, err := runGFSManageCommand(gfsManageShortTimeout, "chown", "hacluster:haclient", path); err != nil {
 		return err
 	}
-	return os.Chmod(gfsManageAlertLogPath, 0600)
+	return os.Chmod(path, 0600)
 }
 
 func createGFSManageAlert() error {

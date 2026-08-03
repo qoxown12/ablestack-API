@@ -7,12 +7,14 @@ type SCVMXMLCreateRequest struct {
 	CPU int `json:"cpu" example:"4"`
 	// 메모리 크기(GiB)
 	Memory int `json:"memory" example:"16"`
-	// disk type: raid_passthrough/lun_passthrough
-	DiskType string `json:"disk_type" example:"lun_passthrough"`
+	// disk type: raid_passthrough/lun_passthrough/disk_passthrough
+	DiskType string `json:"disk_type" example:"disk_passthrough"`
 	// RAID passthrough PCI 목록
 	RaidPassthroughList []string `json:"raid_passthrough_list,omitempty" example:"00:1f.2"`
 	// LUN passthrough block device 목록
 	LunPassthroughList []string `json:"lun_passthrough_list,omitempty" example:"/dev/disk/by-id/wwn-0x1234"`
+	// DISK passthrough block device 목록
+	DiskPassthroughList []string `json:"disk_passthrough_list,omitempty" example:"/dev/disk/by-id/wwn-0x1234"`
 	// management network bridge
 	ManagementNetworkBridge string `json:"management_network_bridge" example:"br0"`
 	// storage traffic network type: nic_passthrough/nic_passthrough_bonding/bridge

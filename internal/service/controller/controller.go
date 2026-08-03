@@ -1,41 +1,29 @@
 package controller
 
 import (
-	"ablecloud.io/ablestack-api/internal/infra/utils"
-	Glue "ablecloud.io/ablestack-api/internal/model/glue"
-	Mold "ablecloud.io/ablestack-api/internal/model/mold"
-	"bufio"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/goccy/go-json"
-	"io"
 	"net/http"
-	"os"
 	"reflect"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
+	"ablecloud.io/ablestack-api/internal/infra/logging"
+	"ablecloud.io/ablestack-api/internal/infra/utils"
 	Cube "ablecloud.io/ablestack-api/internal/model/cube"
 )
 
-type TypeNeighbor struct {
-	IP       string `json:"ip"`
-	HostName string `json:"hostname"`
-}
-
-type TypeNeighbors struct {
-	Neighbors []TypeNeighbor `json:"neighbors"`
-}
+const controllerHandlerInterval = 30 * time.Second
 
 type TypeController struct {
-	Handlers []func()             `json:"handlers"`
-	running  bool                 `json:"running"`
-	Neighbor *TypeNeighbors       `json:"neighbors"`
-	errors   *utils.Errors        `json:"errors"`
-	version  *utils.TypeVersion   `json:"version"`
-	Cube     *Cube.TypeCUBE       `json:"cube"`
-	Mold     *Mold.TypeMoldStatus `json:"mold_status"`
-	Glue     *Glue.TypeGlueStatus `json:"glue_status"`
+	Handlers []func()           `json:"handlers"`
+	running  bool               `json:"running"`
+	errors   *utils.Errors      `json:"errors"`
+	version  *utils.TypeVersion `json:"version"`
+	Cube     *Cube.TypeCUBE     `json:"cube"`
 } //	@name	TypeController
 
 var lockController sync.Once
@@ -47,10 +35,7 @@ func Init() *TypeController {
 			func() {
 				fmt.Println("Creating ", reflect.TypeOf(controller), " now.")
 				controller = &TypeController{}
-				controller.Neighbor = &TypeNeighbors{}
 				controller.Cube = Cube.Cube()
-				controller.Mold = Mold.Status()
-				controller.Glue = Glue.Status()
 				controller.errors = &utils.Errors{}
 			})
 	} else {
@@ -68,11 +53,32 @@ func (c *TypeController) Start() {
 	c.running = true
 	for c.running {
 		for _, handler := range c.Handlers {
-			go handler()
+			go runRegisteredHandler(handler)
 		}
 
-		time.Sleep(time.Duration(10000) * time.Millisecond)
+		time.Sleep(controllerHandlerInterval)
 	}
+}
+
+func runRegisteredHandler(handler func()) {
+	job := registeredHandlerName(handler)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			logging.RecordJobPanic(job, recovered, nil)
+		}
+	}()
+	handler()
+}
+
+func registeredHandlerName(handler func()) string {
+	if handler == nil {
+		return "controller.unknown"
+	}
+	name := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
+	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return name
 }
 
 func (c *TypeController) Stop() {
@@ -101,7 +107,7 @@ func (c *TypeController) ClearError() {
 //
 //	@Summary		Error
 //	@Description	Error.
-//	@Tags			API, CUBE
+//	@Tags			Cube-Error
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	utils.Errorlog
@@ -116,40 +122,4 @@ func (c *TypeController) Error(ctx *gin.Context) {
 func (c *TypeController) DeleteError(context *gin.Context) {
 	c.ClearError()
 	context.IndentedJSON(http.StatusOK, c.GetError())
-}
-
-func (c *TypeController) UpdateCCVMInfo() TypeNeighborInfos {
-	ret := TypeNeighborInfos{Neighbors: make(map[string]TypeNeighborInfo)}
-	for _, neighbor := range c.Neighbor.Neighbors {
-		str, code := neighbor.GetFromNeighbor("v1/mold/ccvm")
-		ret.Neighbors[neighbor.HostName] = TypeNeighborInfo{str, code}
-	}
-	return ret
-}
-
-func (c *TypeController) LoadConfig() {
-	fc, err := os.OpenFile(configPath(), os.O_RDONLY, 0666)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer fc.Close()
-
-	var strconfig []byte
-	var config Config
-
-	strconfig, err = io.ReadAll(bufio.NewReader(fc))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	err = json.Unmarshal(strconfig, &config)
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	//Init()
-	c.Neighbor.Neighbors = config.Neighbor
 }

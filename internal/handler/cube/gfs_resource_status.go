@@ -17,7 +17,7 @@ const gfsResourceStatusCommandTimeout = 10 * time.Second
 //
 //	@Summary		GFS Resource Status
 //	@Description	pcs status xml 기반 GFS 리소스 상태를 조회합니다.
-//	@Tags			CUBE - GFS
+//	@Tags			Cube-GFS
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.GFSResourceStatusResponse

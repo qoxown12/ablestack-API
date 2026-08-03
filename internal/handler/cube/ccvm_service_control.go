@@ -21,7 +21,7 @@ type CCVMServiceControlResponse = CubeModel.CCVMServiceControlResponse
 //
 //	@Summary		CCVM Service Control
 //	@Description	CCVM의 서비스 제어 요청을 CCVM 노드로 전달합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMServiceControlRequest	true	"ccvm service control request"

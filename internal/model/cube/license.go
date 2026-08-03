@@ -7,8 +7,6 @@ type LicenseRequest struct {
 	Action string `json:"action" example:"status"`
 	// license file content (base64)
 	LicenseContent string `json:"license_content,omitempty" example:"BASE64_CONTENT"`
-	// original filename
-	OriginalFilename string `json:"original_filename,omitempty" example:"license.lic"`
 }
 
 // LicenseStatus describes the license status payload.

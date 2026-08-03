@@ -39,6 +39,11 @@ type cephStatusSummary struct {
 	Health struct {
 		Status string `json:"status"`
 	} `json:"health"`
+	Mgrmap struct {
+		Services struct {
+			Dashboard string `json:"dashboard"`
+		} `json:"services"`
+	} `json:"mgrmap"`
 	Monmap struct {
 		NumMons int `json:"num_mons"`
 	} `json:"monmap"`
@@ -155,6 +160,19 @@ func GlueClusterStatusDetail() (*GlueClusterStatusResponse, error) {
 	}
 
 	return resp, nil
+}
+
+// GlueDashboardURL reads the Ceph manager dashboard URL used by Storage Center.
+func GlueDashboardURL() (string, error) {
+	status, _, err := loadCephStatusSummary()
+	if err != nil {
+		return "", err
+	}
+	dashboardURL := strings.TrimSpace(status.Mgrmap.Services.Dashboard)
+	if dashboardURL == "" {
+		return "", fmt.Errorf("glue dashboard 정보를 확인할 수 없습니다.")
+	}
+	return dashboardURL, nil
 }
 
 func loadCephStatusSummary() (cephStatusSummary, map[string]any, error) {

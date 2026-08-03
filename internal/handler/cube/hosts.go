@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"ablecloud.io/ablestack-api/internal/infra/logging"
 	"ablecloud.io/ablestack-api/internal/infra/utils"
 	CubeModel "ablecloud.io/ablestack-api/internal/model/cube"
 	"github.com/gin-gonic/gin"
@@ -18,8 +19,8 @@ type TypeHosts = CubeModel.TypeHosts
 // GetHosts godoc
 //
 //	@Summary		Show List of Hosts
-//	@Description	Cube의 Hosts 파일의 목록을 보여줍니다.
-//	@Tags			CUBE - Host
+//	@Description	Cube-Hosts의 Hosts 파일의 목록을 보여줍니다.
+//	@Tags			Cube-Hosts
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Success		200	{object}	CubeModel.TypeHosts
@@ -41,7 +42,8 @@ func GetHosts(context *gin.Context) {
 
 // UpdateHosts는 전역 hosts 모델을 현재 /etc/hosts 기준으로 새로 고친다.
 func UpdateHosts() {
-	_ = updateHosts(CubeModel.Hosts())
+	err := updateHosts(CubeModel.Hosts())
+	logging.RecordJobResult("cube.UpdateHosts", err, nil)
 }
 
 // updateHosts는 hosts 파일을 읽어 응답 구조체 형태로 재구성한다.

@@ -122,7 +122,7 @@ func ClusterAblecubeTargets() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, ok := root["clusterConfig"].(map[string]any)
+	cfg, ok := clusterConfigMap(root)
 	if !ok {
 		return nil, nil
 	}
@@ -137,7 +137,7 @@ func ClusterAblecubeTargets() ([]string, error) {
 		if !ok {
 			continue
 		}
-		target := strings.TrimSpace(fmt.Sprint(host["ablecube"]))
+		target := clusterString(host["ablecube"])
 		if target == "" {
 			continue
 		}
@@ -148,6 +148,16 @@ func ClusterAblecubeTargets() ([]string, error) {
 		targets = append(targets, target)
 	}
 	return targets, nil
+}
+
+func clusterConfigMap(root map[string]any) (map[string]any, bool) {
+	if cfg, ok := mapFromAny(root["clusterConfig"]); ok {
+		return cfg, true
+	}
+	if _, ok := root["type"]; ok {
+		return root, true
+	}
+	return nil, false
 }
 
 func IsLocalTarget(target string) bool {
@@ -246,7 +256,7 @@ func internalTokenFromRoot(root map[string]any) string {
 	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(fmt.Sprint(securityMap["internal_token"]))
+	return clusterString(securityMap["internal_token"])
 }
 
 func saveInternalToken(root map[string]any, token string) error {
@@ -257,4 +267,30 @@ func saveInternalToken(root map[string]any, token string) error {
 	}
 	securityMap["internal_token"] = strings.TrimSpace(token)
 	return saveClusterRoot(root)
+}
+
+func clusterString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func mapFromAny(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	case nil:
+		return nil, false
+	default:
+		raw, err := json.Marshal(typed)
+		if err != nil {
+			return nil, false
+		}
+		out := map[string]any{}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil, false
+		}
+		return out, true
+	}
 }

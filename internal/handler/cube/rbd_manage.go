@@ -43,7 +43,7 @@ type rbdManageTarget struct {
 //
 //	@Summary		RBD Manage
 //	@Description	GFS용 RBD 이미지를 생성/삭제하고 cluster.json hosts[].ablecube 대상 API를 호출해 각 호스트의 /etc/ceph/rbdmap을 반영합니다. SSH는 사용하지 않습니다.
-//	@Tags			CUBE - GFS
+//	@Tags			Cube-RBD
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.RBDManageRequest	true	"rbd manage request"

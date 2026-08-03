@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+import argparse
+import configparser
+import json
+import os
+import subprocess
+import sys
+
+
+CONF_PATH = os.environ.get("ABLESTACK_GLUE_SMB_CONF", "/etc/samba/smb.conf")
+
+
+def new_config():
+    config = configparser.ConfigParser(
+        interpolation=None,
+        strict=False,
+        delimiters=("=",),
+    )
+    config.optionxform = str
+    return config
+
+
+def read_config():
+    config = new_config()
+    if os.path.exists(CONF_PATH):
+        config.read(CONF_PATH, encoding="utf-8")
+    return config
+
+
+def write_config(config):
+    os.makedirs(os.path.dirname(CONF_PATH), exist_ok=True)
+    with open(CONF_PATH, "w", encoding="utf-8") as file:
+        config.write(file, space_around_delimiters=True)
+
+
+def user_sections(config):
+    return [section for section in config.sections() if section.lower() != "global"]
+
+
+def is_mounted(path):
+    if not path:
+        return "false"
+    try:
+        result = subprocess.run(
+            ["findmnt", path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "false"
+    return "true" if result.returncode == 0 else "false"
+
+
+def section_list():
+    config = read_config()
+    print(json.dumps(user_sections(config), ensure_ascii=False))
+
+
+def array_list():
+    config = read_config()
+    data = {}
+    for section in user_sections(config):
+        data[section] = {}
+        for key, value in config.items(section):
+            data[section][key] = value
+            if key == "path":
+                data[section]["mount_yn"] = is_mounted(value)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def conf_add(section, path, cache, vfs_objects):
+    if not section:
+        raise ValueError("section is required")
+    if not path:
+        raise ValueError("path is required")
+
+    config = read_config()
+    if not config.has_section("global"):
+        config.add_section("global")
+    if not config.has_section(section):
+        config.add_section(section)
+
+    values = {
+        "comment": "Share Directories",
+        "path": path,
+        "writable": "yes",
+        "public": "yes",
+        "create mask": "0777",
+        "directory mask": "0777",
+    }
+    for key, value in values.items():
+        config.set(section, key, value)
+
+    if vfs_objects == "true":
+        config.set(section, "vfs objects", "fake_compression")
+    elif config.has_option(section, "vfs objects"):
+        config.remove_option(section, "vfs objects")
+
+    if cache == "true":
+        config.set(section, "csc policy", "programs")
+    elif config.has_option(section, "csc policy"):
+        config.remove_option(section, "csc policy")
+
+    write_config(config)
+
+
+def conf_delete(section):
+    if not section:
+        raise ValueError("section is required")
+    config = read_config()
+    config.remove_section(section)
+    write_config(config)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a", "--action", required=True)
+    parser.add_argument("-s", "--section", default="")
+    parser.add_argument("-p", "--path", default="")
+    parser.add_argument("-c", "--cache", default="false")
+    parser.add_argument("-f", "--vfs-objects", default="false")
+    args = parser.parse_args()
+
+    try:
+        if args.action == "sectionList":
+            section_list()
+        elif args.action == "arrayList":
+            array_list()
+        elif args.action == "confAdd":
+            conf_add(args.section, args.path, args.cache, args.vfs_objects)
+        elif args.action == "confDelete":
+            conf_delete(args.section)
+        else:
+            raise ValueError("unknown action")
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

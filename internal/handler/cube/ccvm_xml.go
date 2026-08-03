@@ -40,7 +40,7 @@ const (
 //
 //	@Summary		Create CCVM XML
 //	@Description	Cloud Center VM XML을 생성하고 cluster.json 대상에 배포합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMXMLCreateRequest	true	"ccvm xml create request"

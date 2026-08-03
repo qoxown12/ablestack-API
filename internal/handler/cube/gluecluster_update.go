@@ -28,7 +28,7 @@ var glueClusterMaintenanceFlags = []string{"noout", "nobackfill", "norecover"}
 //
 //	@Summary		Glue Cluster Update
 //	@Description	스토리지 클러스터 유지보수 모드를 설정하거나 해제합니다.
-//	@Tags			CUBE - Glue Cluster
+//	@Tags			Cube-GlueCluster
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.GlueClusterUpdateRequest	true	"glue cluster update request"

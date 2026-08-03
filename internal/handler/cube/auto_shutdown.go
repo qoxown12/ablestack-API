@@ -51,7 +51,7 @@ var autoShutdownProtectedMounts = map[string]struct{}{
 //
 //	@Summary		Auto Shutdown
 //	@Description	전체 호스트 정상 종료 절차를 수행합니다. 사용 가능한 action: check_mount, stop_scvms, shutdown_hosts. SSH 대신 ablecube API fan-out을 사용합니다.
-//	@Tags			CUBE - Auto Shutdown
+//	@Tags			Cube-AutoShutdown
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.AutoShutdownRequest	true	"auto shutdown request"

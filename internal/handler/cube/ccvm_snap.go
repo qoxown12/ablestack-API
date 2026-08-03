@@ -86,7 +86,7 @@ type ccvmSnapPCSResource struct {
 //
 //	@Summary		CCVM Snapshot
 //	@Description	HCI/HCI-filesystem 환경에서 CCVM RBD snapshot list/backup/rollback 작업을 수행합니다.
-//	@Tags			CUBE - CCVM
+//	@Tags			Cube-CCVM
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CubeModel.CCVMSnapRequest	true	"ccvm snapshot request"
@@ -187,7 +187,7 @@ func statusCodeFromCCVMSnapResponse(resp CCVMSnapResponse) int {
 	return http.StatusInternalServerError
 }
 
-// runCCVMSnapViaPCS는 cluster.json의 pcsCluster hostname1~3을 ablecubePn과 매핑해
+// runCCVMSnapViaPCS는 cluster.json의 pcsCluster hostnameN을 ablecubePn과 매핑해
 // health가 성공하는 PCS 구성 노드로 snapshot 요청을 전달한다.
 func runCCVMSnapViaPCS(cfg *CubeModel.ClusterConfigSection, req CCVMSnapRequest) CCVMSnapResponse {
 	targets := buildCCVMSnapPCSTargets(cfg)
@@ -537,11 +537,7 @@ func buildCCVMSnapPCSTargets(cfg *CubeModel.ClusterConfigSection) []ccvmSnapPCST
 		return nil
 	}
 
-	pcsIPs := []string{
-		strings.TrimSpace(cfg.PCSCluster.Hostname1),
-		strings.TrimSpace(cfg.PCSCluster.Hostname2),
-		strings.TrimSpace(cfg.PCSCluster.Hostname3),
-	}
+	pcsIPs := cfg.PCSCluster.HostnameList()
 
 	out := make([]ccvmSnapPCSTarget, 0, len(pcsIPs))
 	seen := map[string]struct{}{}
@@ -550,10 +546,10 @@ func buildCCVMSnapPCSTargets(cfg *CubeModel.ClusterConfigSection) []ccvmSnapPCST
 			continue
 		}
 		host, ok := findCCVMSnapHostByPCSIP(cfg, pcsIP)
-		if !ok || strings.TrimSpace(host.Ablecube) == "" {
+		target := ccvmHostAPITarget(cfg, host)
+		if !ok || target == "" {
 			continue
 		}
-		target := strings.TrimSpace(host.Ablecube)
 		if _, exists := seen[target]; exists {
 			continue
 		}
@@ -568,8 +564,11 @@ func buildCCVMSnapPCSTargets(cfg *CubeModel.ClusterConfigSection) []ccvmSnapPCST
 }
 
 func findCCVMSnapHostByPCSIP(cfg *CubeModel.ClusterConfigSection, pcsIP string) (CubeModel.ClusterHost, bool) {
+	pcsIP = strings.TrimSpace(pcsIP)
 	for _, host := range cfg.Hosts {
-		if strings.TrimSpace(host.AblecubePn) == pcsIP {
+		if strings.TrimSpace(host.AblecubePn) == pcsIP ||
+			strings.TrimSpace(host.Ablecube) == pcsIP ||
+			strings.TrimSpace(host.Hostname) == pcsIP {
 			return host, true
 		}
 	}
@@ -589,7 +588,7 @@ func resolveCCVMSnapStartedTarget(cfg *CubeModel.ClusterConfigSection, nodeName 
 			return ccvmSnapPCSTarget{
 				Hostname: strings.TrimSpace(host.Hostname),
 				PCSIP:    strings.TrimSpace(host.AblecubePn),
-				Target:   strings.TrimSpace(host.Ablecube),
+				Target:   ccvmHostAPITarget(cfg, host),
 			}, true
 		}
 	}
