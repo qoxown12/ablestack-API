@@ -197,6 +197,9 @@ func RGWUserUpdate(ctx context.Context, username string, displayName string, ema
 // RGWUserDelete는 RGW user를 삭제한다.
 func RGWUserDelete(ctx context.Context, username string) (map[string]any, error) {
 	username = strings.TrimSpace(username)
+	if strings.EqualFold(username, "dashboard") {
+		return nil, fmt.Errorf("dashboard user cannot be deleted")
+	}
 	if err := ValidateRGWName("username", username); err != nil {
 		return nil, err
 	}

@@ -274,7 +274,11 @@ mount_is_active() {
 
         if command_exists findmnt
         then
-                findmnt -rn --target "$target" >/dev/null 2>&1
+                # --target also succeeds when only a parent filesystem (for
+                # example /) contains the path. Require the path itself to
+                # be a mount point so ordinary directories are not treated
+                # as mounted CephFS volumes.
+                findmnt -rn --mountpoint "$target" >/dev/null 2>&1
                 return $?
         fi
 
@@ -295,14 +299,17 @@ ensure_fstab_entry() {
         local admin_key
         local entry
 
-        fsid="$(get_fsid)"
-        admin_key="$(get_admin_key)"
-        entry="admin@${fsid}.${fs_name}=${volume_path} ${mount_path} ceph name=admin,secret=${admin_key},rw,relatime,seclabel,defaults 0 0"
-
+        # An existing fstab entry is authoritative for this mount path. This
+        # also allows a pre-provisioned entry to be mounted even when the
+        # runtime no longer needs to read the Ceph keyring to recreate it.
         if [ -f /etc/fstab ] && awk -v mount_path="$mount_path" '$2 == mount_path {found=1} END {exit found ? 0 : 1}' /etc/fstab
         then
                 return 0
         fi
+
+        fsid="$(get_fsid)"
+        admin_key="$(get_admin_key)"
+        entry="admin@${fsid}.${fs_name}=${volume_path} ${mount_path} ceph name=admin,secret=${admin_key},rw,relatime,seclabel,defaults 0 0"
 
         printf '%s\n' "$entry" >> /etc/fstab
 }
@@ -343,11 +350,20 @@ mount_ceph_volume() {
         require_value "path" "$mount_path"
 
         ensure_mount_path "$mount_path"
+        # Register the fstab entry before mounting. The entry contains the
+        # Ceph authentication options, so `mount <mount_path>` can use the
+        # same source/options that are persisted for reboot recovery.
+        ensure_fstab_entry "$fs_name" "$volume_path" "$mount_path"
+
         if ! mount_is_active "$mount_path"
         then
-                run_or_fail "mount CephFS volume" mount -t ceph "admin@.${fs_name}=${volume_path}" "$mount_path"
+                run_or_fail "mount CephFS volume" mount "$mount_path"
         fi
-        ensure_fstab_entry "$fs_name" "$volume_path" "$mount_path"
+
+        if ! mount_is_active "$mount_path"
+        then
+                fail "$ERR_RUNTIME" "CephFS volume is not mounted: $mount_path"
+        fi
 }
 
 try_umount_path() {
@@ -441,20 +457,32 @@ EOF
 
 samba_user_exists() {
         local smb_user="$1"
+        local user_dump
 
         if ! command_exists pdbedit
         then
                 return 1
         fi
-        pdbedit -L --debuglevel=1 2>/dev/null | awk -F ':' -v smb_user="$smb_user" '$1 == smb_user {found=1} END {exit found ? 0 : 1}'
+        user_dump="$(pdbedit -L --debuglevel=1 2>/dev/null || true)"
+        awk -F ':' -v smb_user="$smb_user" \
+                '$1 == smb_user {found=1} END {exit found ? 0 : 1}' \
+                <<< "$user_dump"
 }
 
 list_managed_smb_users() {
+        local user_dump
+
         if ! command_exists pdbedit
         then
                 return 0
         fi
-        pdbedit -L --debuglevel=1 2>/dev/null | awk -F ':' '$1 != "root" && $1 != "ablecloud" && $1 != "" {print $1}'
+        # User enumeration is optional for the status response. Do not let a
+        # Samba configuration error abort the whole select command under
+        # `set -o pipefail`.
+        user_dump="$(pdbedit -L --debuglevel=1 2>/dev/null || true)"
+        awk -F ':' \
+                '$1 != "root" && $1 != "ablecloud" && $1 != "" {print $1}' \
+                <<< "$user_dump"
 }
 
 ensure_system_user() {
@@ -708,22 +736,26 @@ PY
 }
 
 json_array_from_lines() {
-        python3 - <<'PY'
-import json
-import sys
+        local lines="${1:-}"
 
-values = [line.strip() for line in sys.stdin if line.strip()]
+        JSON_LINES="$lines" python3 - <<'PY'
+import json
+import os
+
+values = [line.strip() for line in os.environ.get("JSON_LINES", "").splitlines() if line.strip()]
 print(json.dumps(values, ensure_ascii=False))
 PY
 }
 
 json_int_array_from_lines() {
-        python3 - <<'PY'
+        local lines="${1:-}"
+
+        JSON_LINES="$lines" python3 - <<'PY'
 import json
-import sys
+import os
 
 values = []
-for line in sys.stdin:
+for line in os.environ.get("JSON_LINES", "").splitlines():
     line = line.strip()
     if not line:
         continue
@@ -731,20 +763,33 @@ for line in sys.stdin:
         values.append(int(line))
     except ValueError:
         values.append(line)
-print(json.dumps(values, ensure_ascii=False))
+
+print(json.dumps(sorted(set(values), key=str), ensure_ascii=False))
 PY
 }
 
 list_smb_ports() {
+        local socket_lines
+
         if command_exists ss
         then
-                ss -ltnp 2>/dev/null | awk '/smb/ {n=split($4, parts, ":"); if (parts[n] != "") print parts[n]}' || true
+                # Do not pipe ss directly into awk. If ss receives SIGPIPE,
+                # pipefail exposes it as exit code 141 to the caller.
+                if socket_lines="$(ss -ltnp 2>/dev/null)"
+                then
+                        awk '/smb/ {n=split($4, parts, ":"); if (parts[n] != "") print parts[n]}' \
+                                <<< "$socket_lines"
+                fi
                 return 0
         fi
 
         if command_exists netstat
         then
-                netstat -ltnp 2>/dev/null | awk '/smb/ && !/tcp6/ {n=split($4, parts, ":"); if (parts[n] != "") print parts[n]}' || true
+                if socket_lines="$(netstat -ltnp 2>/dev/null)"
+                then
+                        awk '/smb/ && !/tcp6/ {n=split($4, parts, ":"); if (parts[n] != "") print parts[n]}' \
+                                <<< "$socket_lines"
+                fi
                 return 0
         fi
 }
@@ -929,7 +974,9 @@ handle_select() {
         local hostname_value
         local ip_address
         local path_list_json
+        local port_lines
         local ports_json
+        local user_lines
         local users_json
         local security_type
         local smb_names
@@ -940,11 +987,19 @@ handle_select() {
         local winbind_state
         local realm_value
 
-        hostname_value=$(hostname | cut -d '.' -f1)
+        hostname_value="$(hostname)"
+        hostname_value="${hostname_value%%.*}"
         ip_address=$(awk -v host="${hostname_value}-mngt" '$2 == host {print $1; exit}' /etc/hosts 2>/dev/null || true)
-        path_list_json=$("$smb_conf_helper" -a arrayList)
-        ports_json=$(list_smb_ports | sort -u | json_int_array_from_lines)
-        users_json=$(list_managed_smb_users | json_array_from_lines)
+        # Status 조회에서 Samba 설정 오류가 전체 API를 실패시키지 않도록
+        # helper 실패는 빈 객체로 처리한다. 특히 helper가 SIGPIPE로
+        # 종료하면 bash는 141을 반환할 수 있다.
+        path_list_json="$("$smb_conf_helper" -a arrayList 2>/dev/null || printf '{}')"
+
+        port_lines="$(list_smb_ports || true)"
+        ports_json="$(json_int_array_from_lines "$port_lines")"
+
+        user_lines="$(list_managed_smb_users || true)"
+        users_json="$(json_array_from_lines "$user_lines")"
         security_type="$(state_get_security_type)"
         smb_names="$(systemctl_value smb.service Names)"
         smb_status="$(systemctl_value smb.service ActiveState)"

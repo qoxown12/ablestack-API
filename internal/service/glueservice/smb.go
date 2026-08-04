@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	defaultSMBScriptPath = "/etc/ablestack/shell/Samba-Execute.sh"
+	defaultSMBScriptPath = "/root/ablestack-API/shell/Samba-Execute.sh"
 	envSMBScriptPath     = "ABLESTACK_GLUE_SMB_SCRIPT"
 )
 
