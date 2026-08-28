@@ -43,6 +43,28 @@ func ImageCreate(context *gin.Context) {
 	ok(context, val)
 }
 
+// ImageResize는 JSON, form, query 입력을 받아 RBD image를 확장한다.
+func ImageResize(context *gin.Context) {
+	params := requestParams(context)
+	size, err := parseSizeGiB(params["size"])
+	if err != nil {
+		badRequest(context, err)
+		return
+	}
+	imageName := firstNonEmpty(params["image_name"], params["image"], params["image_ref"])
+	val, err := glueservice.ResizeImage(
+		context.Request.Context(),
+		params["pool_name"],
+		imageName,
+		size,
+	)
+	if err != nil {
+		serviceError(context, err)
+		return
+	}
+	ok(context, val)
+}
+
 // ImageDelete는 JSON, form, query 입력을 받아 RBD image를 삭제한다.
 func ImageDelete(context *gin.Context) {
 	params := requestParams(context)
@@ -87,6 +109,22 @@ func ImageListDoc() {}
 //	@Failure		500	{object}	GlueModel.Response
 //	@Router			/glue/image [post]
 func ImageCreateDoc() {}
+
+// Glue-ImageImageResizeDoc Swagger 문서
+//
+//	@Summary		RBD Image 크기 변경
+//	@Description	SCVM 로컬에서 rbd info로 현재 크기를 확인한 뒤 더 큰 크기로만 rbd resize를 실행합니다. size는 GiB 단위입니다. image는 pool/image 형식 또는 pool_name과 image_name으로 전달할 수 있습니다.
+//	@Tags		Glue-Image
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body	GlueModel.ImageResizeRequest	true	"image resize request"
+//	@Success		200	{object}	GlueModel.Response
+//	@Failure		400	{object}	GlueModel.Response
+//	@Failure		403	{object}	GlueModel.Response
+//	@Failure		500	{object}	GlueModel.Response
+//	@Router		/glue/image [put]
+//	@Router		/glue/iscsi/image [put]
+func ImageResizeDoc() {}
 
 // Glue-ImageImageDeleteDoc Swagger 문서
 //

@@ -58,8 +58,8 @@ http://<ablecube-ip>:8090/swagger/index.html
 | --- | --- |
 | libvirt 기반 VM 상태/제어 | `libvirt`, `virsh`, `qemu-guest-agent`, Go libvirt 빌드 환경 |
 | PCS 제어 | `pcs`, `crm_mon`, pacemaker/corosync |
-| Glue/Ceph 상태 및 스토리지 API | `ceph`, `rbd`, `radosgw-admin`, `rbd mirror`, Ceph dashboard API |
-| Glue iSCSI | `ceph orch`, Ceph dashboard API, `podman`, iSCSI gateway container `gwcli` |
+| Glue/Ceph 상태 및 스토리지 API | `ceph`, `rbd`, `radosgw-admin`, `rbd mirror`, Glue dashboard API |
+| Glue iSCSI | `ceph orch`, Glue dashboard API, `podman`, iSCSI gateway container `gwcli` |
 | Glue SMB | SCVM 로컬 `Samba-Execute.sh`, `smbpasswd`, `pdbedit`, Samba service, CephFS mount command |
 | 디스크/NIC 조회 | `lsblk`, `lspci`, `nmcli`, `ip` |
 | DB dump | `/usr/bin/mysqldump`, `crontab`, `at` |
@@ -81,9 +81,9 @@ RPM hard dependency는 host/SCVM/CCVM 공통 실행에 필요한 `systemd`, `bas
 | `ABLESTACK_SECURITY_PATCH_SCRIPT` | 보안 패치 스크립트 경로 override |
 | `ABLESTACK_NODE_ROLE` | 노드 역할 override. Glue API route는 `scvm`일 때만 등록 |
 | `ABLESTACK_NODE_ROLE_FILE` | 노드 역할 파일 override. 기본값 `/etc/ablestack/node-role` |
-| `ABLESTACK_GLUE_DASHBOARD_URL` | iSCSI target/discovery용 Ceph dashboard URL override. 비어 있으면 `ceph mgr services -f json`에서 조회 |
-| `ABLESTACK_GLUE_DASHBOARD_USER` | Ceph dashboard API 사용자. 기본값 `admin` |
-| `ABLESTACK_GLUE_DASHBOARD_PASSWORD` | Ceph dashboard API password. iSCSI target/discovery 호출에 필요 |
+| `ABLESTACK_GLUE_DASHBOARD_URL` | iSCSI target/discovery용 Glue dashboard URL override. 비어 있으면 `ceph mgr services -f json`에서 조회 |
+| `ABLESTACK_GLUE_DASHBOARD_USER` | Glue dashboard API 사용자. 기본값 `admin` |
+| `ABLESTACK_GLUE_DASHBOARD_PASSWORD` | Glue dashboard API password. iSCSI target/discovery 호출에 필요 |
 | `ABLESTACK_GLUE_SMB_SCRIPT` | SCVM 로컬 SMB 실행 스크립트 경로. 기본값은 RPM 설치 경로 `/etc/ablestack/shell/Samba-Execute.sh` |
 
 ## RPM Build

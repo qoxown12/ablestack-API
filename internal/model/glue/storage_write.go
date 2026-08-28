@@ -69,6 +69,7 @@ type RGWUserRequest struct {
 	Username    string `json:"username" example:"user01"`
 	DisplayName string `json:"display_name,omitempty" example:"User 01"`
 	Email       string `json:"email,omitempty" example:"user01@example.com"`
+	Suspended   string `json:"suspended,omitempty" example:"0" enums:"0,1"`
 	KeyType     string `json:"key_type,omitempty" example:"s3"`
 	AccessKey   string `json:"access_key,omitempty" example:"accesskey"`
 	SecretKey   string `json:"secret_key,omitempty" example:"secretkey"`

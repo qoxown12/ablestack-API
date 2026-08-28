@@ -76,7 +76,10 @@ type iscsiDiskPayload struct {
 }
 
 type iscsiTargetPayload struct {
-	TargetIQN    string               `json:"target_iqn,omitempty"`
+	// Glue dashboard requires the current target IQN in the update body as
+	// well as in the URL. Keep this field non-omitempty so that a future
+	// caller cannot silently send an invalid update payload.
+	TargetIQN    string               `json:"target_iqn"`
 	NewTargetIQN string               `json:"new_target_iqn,omitempty"`
 	Portals      []iscsiPortalPayload `json:"portals"`
 	Disks        []iscsiDiskPayload   `json:"disks"`
@@ -130,12 +133,12 @@ func ISCSIServiceUpdate(ctx context.Context, serviceID string, hosts []string, t
 	return val, nil
 }
 
-// ISCSIDiscoveryAuth는 Ceph dashboard iSCSI discovery auth 정보를 조회한다.
+// ISCSIDiscoveryAuth는 Glue dashboard iSCSI discovery auth 정보를 조회한다.
 func ISCSIDiscoveryAuth(ctx context.Context) (any, error) {
 	return cephDashboardRequest(ctx, http.MethodGet, "api/iscsi/discoveryauth", nil, http.StatusOK)
 }
 
-// ISCSIDiscoveryAuthUpdate는 Ceph dashboard iSCSI discovery auth 정보를 수정한다.
+// ISCSIDiscoveryAuthUpdate는 Glue dashboard iSCSI discovery auth 정보를 수정한다.
 func ISCSIDiscoveryAuthUpdate(ctx context.Context, user string, password string, mutualUser string, mutualPassword string) (any, error) {
 	payload, err := normalizeISCSIAuthPayload(user, password, mutualUser, mutualPassword, false)
 	if err != nil {
@@ -144,7 +147,7 @@ func ISCSIDiscoveryAuthUpdate(ctx context.Context, user string, password string,
 	return cephDashboardRequest(ctx, http.MethodPut, "api/iscsi/discoveryauth?user=%20&password=%20&mutual_user=%20&mutual_password=%20", payload, http.StatusOK)
 }
 
-// ISCSITargetList는 Ceph dashboard에서 iSCSI target 목록 또는 상세를 조회한다.
+// ISCSITargetList는 Glue dashboard에서 iSCSI target 목록 또는 상세를 조회한다.
 func ISCSITargetList(ctx context.Context, iqnID string) (any, error) {
 	iqnID = strings.TrimSpace(iqnID)
 	path := "api/iscsi/target"
@@ -157,7 +160,7 @@ func ISCSITargetList(ctx context.Context, iqnID string) (any, error) {
 	return cephDashboardRequest(ctx, http.MethodGet, path, nil, http.StatusOK)
 }
 
-// ISCSITargetCreate는 Ceph dashboard API로 iSCSI target을 생성한다.
+// ISCSITargetCreate는 Glue dashboard API로 iSCSI target을 생성한다.
 func ISCSITargetCreate(ctx context.Context, iqnID string, hosts []string, ipAddresses []string, poolNames []string, imageNames []string, aclEnabled string, username string, password string, mutualUsername string, mutualPassword string) (any, error) {
 	payload, err := normalizeISCSITargetPayload(iqnID, "", hosts, ipAddresses, poolNames, imageNames, aclEnabled, username, password, mutualUsername, mutualPassword)
 	if err != nil {
@@ -166,7 +169,7 @@ func ISCSITargetCreate(ctx context.Context, iqnID string, hosts []string, ipAddr
 	return cephDashboardRequest(ctx, http.MethodPost, "api/iscsi/target", payload, http.StatusCreated)
 }
 
-// ISCSITargetUpdate는 Ceph dashboard API로 iSCSI target을 수정한다.
+// ISCSITargetUpdate는 Glue dashboard API로 iSCSI target을 수정한다.
 func ISCSITargetUpdate(ctx context.Context, iqnID string, newIQNID string, hosts []string, ipAddresses []string, poolNames []string, imageNames []string, aclEnabled string, username string, password string, mutualUsername string, mutualPassword string) (any, error) {
 	payload, err := normalizeISCSITargetPayload(iqnID, newIQNID, hosts, ipAddresses, poolNames, imageNames, aclEnabled, username, password, mutualUsername, mutualPassword)
 	if err != nil {
@@ -175,7 +178,7 @@ func ISCSITargetUpdate(ctx context.Context, iqnID string, newIQNID string, hosts
 	return cephDashboardRequest(ctx, http.MethodPut, "api/iscsi/target/"+url.PathEscape(strings.TrimSpace(iqnID)), payload, http.StatusOK)
 }
 
-// ISCSITargetDelete는 Ceph dashboard API로 iSCSI target을 삭제한다.
+// ISCSITargetDelete는 Glue dashboard API로 iSCSI target을 삭제한다.
 func ISCSITargetDelete(ctx context.Context, iqnID string) (map[string]any, error) {
 	iqnID = strings.TrimSpace(iqnID)
 	if err := ValidateISCSIIQN("iqn_id", iqnID); err != nil {
@@ -277,6 +280,12 @@ func normalizeISCSITargetPayload(iqnID string, newIQNID string, hosts []string, 
 	if err := ValidateISCSIIQN("iqn_id", iqnID); err != nil {
 		return iscsiTargetPayload{}, err
 	}
+	// The UI sends the current IQN in the new-IQN field for ordinary target
+	// edits. Treat that as no rename; otherwise the dashboard may attempt a
+	// self-rename while the user only changed the disk list.
+	if newIQNID == iqnID {
+		newIQNID = ""
+	}
 	if newIQNID != "" {
 		if err := ValidateISCSIIQN("new_iqn_id", newIQNID); err != nil {
 			return iscsiTargetPayload{}, err
@@ -328,15 +337,18 @@ func normalizeISCSITargetPayload(iqnID string, newIQNID string, hosts []string, 
 	if err != nil {
 		return iscsiTargetPayload{}, fmt.Errorf("acl_enabled must be true or false")
 	}
-	auth, err := normalizeISCSIAuthPayload(username, password, mutualUsername, mutualPassword, acl)
+	// ceph-iscsi treats initiator-IQN ACL authentication and target CHAP as
+	// mutually exclusive modes. ACL mode therefore does not require CHAP
+	// credentials; credentials are only used when ACL mode is disabled.
+	auth, err := normalizeISCSIAuthPayload(username, password, mutualUsername, mutualPassword, false)
 	if err != nil {
 		return iscsiTargetPayload{}, err
 	}
+	if acl && (auth.User != "" || auth.Password != "" || auth.MutualUser != "" || auth.MutualPassword != "") {
+		return iscsiTargetPayload{}, fmt.Errorf("acl_enabled must be disabled when target CHAP authentication is configured")
+	}
 
 	targetIQN := iqnID
-	if newIQNID != "" {
-		targetIQN = ""
-	}
 	return iscsiTargetPayload{
 		TargetIQN:    targetIQN,
 		NewTargetIQN: newIQNID,
@@ -356,16 +368,26 @@ func normalizeISCSIAuthPayload(user string, password string, mutualUser string, 
 		MutualUser:     strings.TrimSpace(mutualUser),
 		MutualPassword: strings.TrimSpace(mutualPassword),
 	}
-	if err := ValidateISCSIUser("user", payload.User, required); err != nil {
+	if err := ValidateISCSIChapUser("user", payload.User, required); err != nil {
 		return payload, err
 	}
-	if err := ValidateISCSISecret("password", payload.Password, required); err != nil {
+	if err := ValidateISCSIChapSecret("password", payload.Password, required); err != nil {
 		return payload, err
 	}
-	if err := ValidateISCSIUser("mutual_user", payload.MutualUser, false); err != nil {
+	if payload.User == "" || payload.Password == "" {
+		if payload.User != payload.Password {
+			return payload, fmt.Errorf("user and password must be provided together")
+		}
+	}
+	if payload.MutualUser == "" || payload.MutualPassword == "" {
+		if payload.MutualUser != payload.MutualPassword {
+			return payload, fmt.Errorf("mutual_user and mutual_password must be provided together")
+		}
+	}
+	if err := ValidateISCSIChapUser("mutual_user", payload.MutualUser, false); err != nil {
 		return payload, err
 	}
-	if err := ValidateISCSISecret("mutual_password", payload.MutualPassword, false); err != nil {
+	if err := ValidateISCSIChapSecret("mutual_password", payload.MutualPassword, false); err != nil {
 		return payload, err
 	}
 	return payload, nil
@@ -450,7 +472,7 @@ func cephDashboardRequest(ctx context.Context, method string, path string, body 
 		return nil, err
 	}
 	if !statusAllowed(resp.StatusCode, successStatuses) {
-		return nil, fmt.Errorf("ceph dashboard %s %s returned %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(raw)))
+		return nil, fmt.Errorf("Glue dashboard %s %s returned %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	if resp.StatusCode == http.StatusNoContent || len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]any{"status": "success"}, nil
@@ -474,7 +496,7 @@ func cephDashboardAuthToken(ctx context.Context, baseURL string) (string, error)
 	}
 	password := strings.TrimSpace(os.Getenv(envISCSIDashboardPassword))
 	if password == "" {
-		return "", fmt.Errorf("%s is required for iSCSI dashboard API", envISCSIDashboardPassword)
+		return "", fmt.Errorf("%s is required for Glue dashboard API", envISCSIDashboardPassword)
 	}
 	payload := map[string]string{"username": user, "password": password}
 	raw, err := json.Marshal(payload)
@@ -497,14 +519,14 @@ func cephDashboardAuthToken(ctx context.Context, baseURL string) (string, error)
 		return "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("ceph dashboard auth returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respRaw)))
+		return "", fmt.Errorf("Glue dashboard auth returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respRaw)))
 	}
 	var token iscsiDashboardToken
 	if err := json.Unmarshal(respRaw, &token); err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(token.Token) == "" {
-		return "", fmt.Errorf("ceph dashboard auth token is empty")
+		return "", fmt.Errorf("Glue dashboard auth token is empty")
 	}
 	return token.Token, nil
 }

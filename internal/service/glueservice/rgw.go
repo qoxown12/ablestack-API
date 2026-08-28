@@ -2,11 +2,14 @@ package glueservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 )
+
+const rgwBucketNotEmptyMessage = "Bucket is not empty. Remove all objects before deletion."
 
 type rgwBucketCreatePayload struct {
 	Bucket                  string `json:"bucket"`
@@ -161,11 +164,12 @@ func RGWUserCreate(ctx context.Context, username string, displayName string, ema
 	return map[string]any{"status": "success", "username": username}, nil
 }
 
-// RGWUserUpdate는 RGW user metadata/key를 수정한다.
-func RGWUserUpdate(ctx context.Context, username string, displayName string, email string, keyType string, accessKey string, secretKey string) (map[string]any, error) {
+// RGWUserUpdate는 RGW user metadata/key와 활성화 상태를 수정한다.
+func RGWUserUpdate(ctx context.Context, username string, displayName string, email string, suspended string, keyType string, accessKey string, secretKey string) (map[string]any, error) {
 	username = strings.TrimSpace(username)
 	displayName = strings.TrimSpace(displayName)
 	email = strings.TrimSpace(email)
+	suspended = strings.TrimSpace(suspended)
 	keyType = strings.TrimSpace(keyType)
 	accessKey = strings.TrimSpace(accessKey)
 	secretKey = strings.TrimSpace(secretKey)
@@ -173,11 +177,19 @@ func RGWUserUpdate(ctx context.Context, username string, displayName string, ema
 		return nil, err
 	}
 	args := []string{"user", "modify", "--uid", username}
+	modifyRequested := false
 	if displayName != "" {
 		args = append(args, "--display-name", displayName)
+		modifyRequested = true
 	}
 	if email != "" {
 		args = append(args, "--email", email)
+		modifyRequested = true
+	}
+	if suspended != "" {
+		if suspended != "0" && suspended != "1" {
+			return nil, fmt.Errorf("suspended must be 0 or 1")
+		}
 	}
 	if keyType != "" {
 		if err := ValidateRGWName("key_type", keyType); err != nil {
@@ -187,9 +199,24 @@ func RGWUserUpdate(ctx context.Context, username string, displayName string, ema
 			return nil, fmt.Errorf("access_key and secret_key are required when key_type is set")
 		}
 		args = append(args, "--key-type", keyType, "--access-key", accessKey, "--secret-key", secretKey)
+		modifyRequested = true
 	}
-	if _, err := runRGW(ctx, args...); err != nil {
-		return nil, err
+	// `--suspended` is not a user modify option in radosgw-admin. Keep
+	// metadata/key changes on user modify and change the user state with the
+	// dedicated user enable/suspend commands.
+	if suspended == "" || modifyRequested {
+		if _, err := runRGW(ctx, args...); err != nil {
+			return nil, err
+		}
+	}
+	if suspended != "" {
+		stateCommand := "suspend"
+		if suspended == "0" {
+			stateCommand = "enable"
+		}
+		if _, err := runRGW(ctx, "user", stateCommand, "--uid", username); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]any{"status": "success", "username": username}, nil
 }
@@ -237,7 +264,7 @@ func RGWQuotaSet(ctx context.Context, username string, scope string, maxObjects 
 	return map[string]any{"status": "success", "username": username, "scope": scope, "state": state}, nil
 }
 
-// RGWBucketCreate는 Ceph dashboard API로 RGW bucket을 생성한다.
+// RGWBucketCreate는 Glue dashboard API로 RGW bucket을 생성한다.
 func RGWBucketCreate(ctx context.Context, bucketName string, username string, lockEnabled string, lockMode string, lockRetentionPeriodDays string) (any, error) {
 	bucketName = strings.TrimSpace(bucketName)
 	username = strings.TrimSpace(username)
@@ -261,7 +288,7 @@ func RGWBucketCreate(ctx context.Context, bucketName string, username string, lo
 	return cephDashboardRequest(ctx, http.MethodPost, "api/rgw/bucket", payload, http.StatusCreated, http.StatusOK)
 }
 
-// RGWBucketUpdate는 Ceph dashboard API로 RGW bucket 설정을 수정한다.
+// RGWBucketUpdate는 Glue dashboard API로 RGW bucket 설정을 수정한다.
 func RGWBucketUpdate(ctx context.Context, bucketName string, bucketID string, username string, versioning string, lockMode string, lockRetentionPeriodDays string) (any, error) {
 	bucketName = strings.TrimSpace(bucketName)
 	bucketID = strings.TrimSpace(bucketID)
@@ -292,9 +319,20 @@ func RGWBucketDelete(ctx context.Context, bucketName string) (map[string]any, er
 		return nil, err
 	}
 	if _, err := run(ctx, "radosgw-admin", "bucket", "rm", "--bucket", bucketName); err != nil {
+		if isRGWBucketNotEmptyError(err) {
+			return nil, errors.New(rgwBucketNotEmptyMessage)
+		}
 		return nil, err
 	}
 	return map[string]any{"status": "success", "bucket_name": bucketName}, nil
+}
+
+func isRGWBucketNotEmptyError(err error) bool {
+	message := strings.ToLower(err.Error())
+
+	return strings.Contains(message, "bucket is not empty") ||
+		strings.Contains(message, "bucket not empty") ||
+		strings.Contains(message, "remove all objects before deletion")
 }
 
 func rgwUserWithStats(ctx context.Context, username string) (map[string]any, error) {

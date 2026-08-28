@@ -23,6 +23,7 @@ var glueRoutes = []routeSpec{
 
 	{Method: "GET", Path: "/image", Module: "image", Endpoint: "list", Description: "list or inspect RBD images", Status: "active"},
 	{Method: "POST", Path: "/image", Module: "image", Endpoint: "create", Description: "create RBD image", Status: "active"},
+	{Method: "PUT", Path: "/image", Module: "image", Endpoint: "resize", Description: "resize RBD image", Status: "active"},
 	{Method: "DELETE", Path: "/image", Module: "image", Endpoint: "delete", Description: "delete RBD image", Status: "active"},
 
 	// Service endpoint는 ceph orch로만 매핑한다. legacy glue-api의 SMB systemctl 처리는 가져오지 않는다.
@@ -52,12 +53,13 @@ var glueRoutes = []routeSpec{
 	{Method: "PUT", Path: "/nfs/export/:cluster_id", Module: "nfs", Endpoint: "export_update", Description: "update NFS export", Status: "active"},
 	{Method: "DELETE", Path: "/nfs/export/:cluster_id/:export_id", Module: "nfs", Endpoint: "export_delete", Description: "delete NFS export", Status: "active"},
 
-	// iSCSI endpoint는 ceph orch, Ceph dashboard API, local podman gwcli로 연결한다.
+	// iSCSI endpoint는 ceph orch, Glue dashboard API, local podman gwcli로 연결한다.
 	{Method: "POST", Path: "/iscsi", Module: "iscsi", Endpoint: "service_create", Description: "create iSCSI service", Status: "active"},
 	{Method: "PUT", Path: "/iscsi", Module: "iscsi", Endpoint: "service_update", Description: "update iSCSI service", Status: "active"},
 	{Method: "GET", Path: "/iscsi/discovery", Module: "iscsi", Endpoint: "discovery_get", Description: "show iSCSI discovery auth", Status: "active"},
 	{Method: "PUT", Path: "/iscsi/discovery", Module: "iscsi", Endpoint: "discovery_update", Description: "update iSCSI discovery auth", Status: "active"},
 	{Method: "GET", Path: "/iscsi/target", Module: "iscsi", Endpoint: "target_list", Description: "list iSCSI targets", Status: "active"},
+	{Method: "PUT", Path: "/iscsi/image", Module: "iscsi", Endpoint: "image_resize", Description: "resize iSCSI RBD image", Status: "active"},
 	{Method: "POST", Path: "/iscsi/target", Module: "iscsi", Endpoint: "target_create", Description: "create iSCSI target", Status: "active"},
 	{Method: "PUT", Path: "/iscsi/target", Module: "iscsi", Endpoint: "target_update", Description: "update iSCSI target", Status: "active"},
 	{Method: "DELETE", Path: "/iscsi/target", Module: "iscsi", Endpoint: "target_delete", Description: "delete iSCSI target", Status: "active"},
@@ -147,6 +149,7 @@ func registerImplementedRoutes(group *gin.RouterGroup) {
 	group.DELETE("/pool/:pool_name", PoolDelete)
 	group.GET("/image", ImageList)
 	group.POST("/image", ImageCreate)
+	group.PUT("/image", ImageResize)
 	group.DELETE("/image", ImageDelete)
 	group.GET("/service", ServiceList)
 	group.POST("/service/:service_name", ServiceControl)
@@ -187,6 +190,7 @@ func registerImplementedRoutes(group *gin.RouterGroup) {
 	group.GET("/iscsi/discovery", ISCSIDiscoveryGet)
 	group.PUT("/iscsi/discovery", ISCSIDiscoveryUpdate)
 	group.GET("/iscsi/target", ISCSITargetList)
+	group.PUT("/iscsi/image", ImageResize)
 	group.POST("/iscsi/target", ISCSITargetCreate)
 	group.PUT("/iscsi/target", ISCSITargetUpdate)
 	group.DELETE("/iscsi/target", ISCSITargetDelete)
@@ -232,6 +236,7 @@ func isImplementedRoute(method string, path string) bool {
 		"DELETE /pool/:pool_name",
 		"GET /image",
 		"POST /image",
+		"PUT /image",
 		"DELETE /image",
 		"GET /service",
 		"POST /service/:service_name",
@@ -272,6 +277,7 @@ func isImplementedRoute(method string, path string) bool {
 		"GET /iscsi/discovery",
 		"PUT /iscsi/discovery",
 		"GET /iscsi/target",
+		"PUT /iscsi/image",
 		"POST /iscsi/target",
 		"PUT /iscsi/target",
 		"DELETE /iscsi/target",

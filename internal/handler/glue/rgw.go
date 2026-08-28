@@ -93,7 +93,7 @@ func RGWUserCreate(context *gin.Context) {
 // RGWUserUpdate는 RGW user를 수정한다.
 func RGWUserUpdate(context *gin.Context) {
 	params := requestParams(context)
-	val, err := glueservice.RGWUserUpdate(context.Request.Context(), params["username"], params["display_name"], params["email"], params["key_type"], params["access_key"], params["secret_key"])
+	val, err := glueservice.RGWUserUpdate(context.Request.Context(), params["username"], params["display_name"], params["email"], params["suspended"], params["key_type"], params["access_key"], params["secret_key"])
 	if err != nil {
 		serviceError(context, err)
 		return
@@ -205,7 +205,7 @@ func RGWUserListDoc() {}
 // Glue-RGWRGWUserDoc Swagger 문서
 //
 //	@Summary		RGW User 변경
-//	@Description	SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.
+//	@Description	SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다. user 수정 시 suspended는 0(활성, user enable) 또는 1(비활성, user suspend)입니다.
 //	@Tags			Glue-RGW
 //	@Accept			json
 //	@Produce		json
@@ -237,7 +237,7 @@ func RGWBucketListDoc() {}
 // Glue-RGWRGWBucketDoc Swagger 문서
 //
 //	@Summary		RGW Bucket 변경
-//	@Description	Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.
+//	@Description	Glue dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.
 //	@Tags			Glue-RGW
 //	@Accept			json
 //	@Produce		json

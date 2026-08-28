@@ -3123,7 +3123,7 @@ const docTemplate = `{
         },
         "/glue/iscsi/discovery": {
             "get": {
-                "description": "Ceph dashboard API로 iSCSI discovery auth 정보를 조회합니다.",
+                "description": "Glue dashboard API로 iSCSI discovery auth 정보를 조회합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -3153,7 +3153,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Ceph dashboard API로 iSCSI discovery auth 정보를 수정합니다.",
+                "description": "Glue dashboard API로 iSCSI discovery auth 정보를 수정합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3205,7 +3205,7 @@ const docTemplate = `{
         },
         "/glue/iscsi/target": {
             "get": {
-                "description": "Ceph dashboard API로 iSCSI target 목록 또는 상세를 조회합니다.",
+                "description": "Glue dashboard API로 iSCSI target 목록 또는 상세를 조회합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -3249,7 +3249,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Ceph dashboard API로 iSCSI target을 수정합니다.",
+                "description": "Glue dashboard API로 iSCSI target을 수정합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3299,7 +3299,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Ceph dashboard API로 iSCSI target을 생성합니다.",
+                "description": "Glue dashboard API로 iSCSI target을 생성합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3349,7 +3349,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Ceph dashboard API로 iSCSI target을 삭제합니다.",
+                "description": "Glue dashboard API로 iSCSI target을 삭제합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5242,7 +5242,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
+                "description": "Glue dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5292,7 +5292,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
+                "description": "Glue dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5342,7 +5342,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Ceph dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
+                "description": "Glue dashboard API로 RGW bucket을 생성/수정하고, 삭제는 radosgw-admin bucket rm 명령으로 실행합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5490,7 +5490,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.",
+                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다. user 수정 시 suspended는 0(활성, user enable) 또는 1(비활성, user suspend)입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5540,7 +5540,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.",
+                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다. user 수정 시 suspended는 0(활성, user enable) 또는 1(비활성, user suspend)입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5590,7 +5590,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다.",
+                "description": "SCVM 로컬에서 radosgw-admin user create/modify/rm 명령으로 RGW user를 변경합니다. user 수정 시 suspended는 0(활성, user enable) 또는 1(비활성, user suspend)입니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10459,6 +10459,14 @@ const docTemplate = `{
                 "secret_key": {
                     "type": "string",
                     "example": "secretkey"
+                },
+                "suspended": {
+                    "type": "string",
+                    "enum": [
+                        "0",
+                        "1"
+                    ],
+                    "example": "0"
                 },
                 "username": {
                     "type": "string",

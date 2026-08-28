@@ -268,7 +268,7 @@ curl -X POST http://<ablecube-ip>:8090/api/v1/<path> \
 | Glue API | 여러 Method | `/glue/pool`, `/glue/image`, `/glue/service` | endpoint별 body/path | SCVM 로컬 Ceph/RBD/orch 명령 실행 |
 | Glue API | 여러 Method | `/glue/gluefs`, `/glue/nfs`, `/glue/rgw` | endpoint별 body/query/path | SCVM 로컬 GlueFS/NFS/RGW 조회/생성/수정/삭제 명령 실행 |
 | Glue API | 여러 Method | `/glue/nvmeof` | endpoint별 body/query | SCVM 로컬 `ceph orch`, `rbd`, `podman run/exec` 기반 NVMe-oF 명령 실행 |
-| Glue API | 여러 Method | `/glue/iscsi` | endpoint별 body/query | SCVM 로컬 `ceph orch`, Ceph dashboard API, `podman exec gwcli` 기반 iSCSI 명령 실행 |
+| Glue API | 여러 Method | `/glue/iscsi` | endpoint별 body/query | SCVM 로컬 `ceph orch`, Glue dashboard API, `podman exec gwcli` 기반 iSCSI 명령 실행 |
 | Glue API | 여러 Method | `/glue/smb` | endpoint별 body/query | SCVM 로컬 Samba 실행 스크립트 기반 SMB 명령 실행 |
 | Glue API | 여러 Method | `/glue/mirror` | endpoint별 body/path/query | SCVM 로컬 `rbd mirror`와 bootstrap token import/export 기반 Mirror 명령 실행 |
 | GFS | GET | `/cube/gfs/resource/status` | 없음 | GFS 관련 PCS 리소스 상태 |
@@ -295,7 +295,7 @@ SCVM role 판정 순서:
 
 SCVM template/cloud-init에는 `ABLESTACK_NODE_ROLE=scvm` 또는 `/etc/ablestack/node-role` 파일을 서비스 시작 전에 넣는 것을 권장한다. `cluster.json` 기반 판정은 파일이 API 서버 시작 시점에 존재할 때만 route 등록에 사용할 수 있다.
 
-현재 `/api/v1/glue/status`, `/api/v1/glue/hosts`, `/api/v1/glue/version`, `/api/v1/glue/pool`, `/api/v1/glue/image`, `/api/v1/glue/service`, `/api/v1/glue/gluefs`, `/api/v1/glue/nfs`, `/api/v1/glue/rgw`, `/api/v1/glue/nvmeof`, `/api/v1/glue/iscsi`, `/api/v1/glue/smb`, `/api/v1/glue/mirror`는 SCVM 로컬 명령 또는 SCVM 로컬 Ceph dashboard API로 동작한다. 명령은 SSH와 shell pipeline을 거치지 않고 `exec.CommandContext`로 실행하며, pool/image/service/filesystem/cluster/user/bucket/NVMe-oF NQN/UUID/IP/iSCSI IQN/SMB path 값은 허용 문자만 통과시킨다. SMB password와 RGW secret key는 명령 실패 응답에서 마스킹한다.
+현재 `/api/v1/glue/status`, `/api/v1/glue/hosts`, `/api/v1/glue/version`, `/api/v1/glue/pool`, `/api/v1/glue/image`, `/api/v1/glue/service`, `/api/v1/glue/gluefs`, `/api/v1/glue/nfs`, `/api/v1/glue/rgw`, `/api/v1/glue/nvmeof`, `/api/v1/glue/iscsi`, `/api/v1/glue/smb`, `/api/v1/glue/mirror`는 SCVM 로컬 명령 또는 SCVM 로컬 Glue dashboard API로 동작한다. 명령은 SSH와 shell pipeline을 거치지 않고 `exec.CommandContext`로 실행하며, pool/image/service/filesystem/cluster/user/bucket/NVMe-oF NQN/UUID/IP/iSCSI IQN/SMB path 값은 허용 문자만 통과시킨다. SMB password와 RGW secret key는 명령 실패 응답에서 마스킹한다.
 
 | Endpoint | 실행 명령 |
 | --- | --- |
@@ -308,6 +308,8 @@ SCVM template/cloud-init에는 `ABLESTACK_NODE_ROLE=scvm` 또는 `/etc/ablestack
 | `GET /glue/image?pool_name=<pool>` | `rbd ls -l -p <pool> --format json` |
 | `GET /glue/image?pool_name=<pool>&image_name=<image>` | `rbd info <pool>/<image> --format json` |
 | `POST /glue/image` | `rbd create --size <MiB> <pool>/<image>` |
+| `PUT /glue/image` | `rbd info <pool>/<image> --format json`, then `rbd resize --size <MiB> <pool>/<image>` (확장만 허용) |
+| `PUT /glue/iscsi/image` | `PUT /glue/image`와 동일한 iSCSI 이미지 확장 alias |
 | `DELETE /glue/image` | `rbd rm <pool>/<image>` |
 | `GET /glue/service` | `ceph orch ls -f json` |
 | `POST /glue/service/{service_name}?control=restart` | `ceph orch <start|stop|restart|redeploy> <service_name>` |
@@ -337,11 +339,11 @@ SCVM template/cloud-init에는 `ABLESTACK_NODE_ROLE=scvm` 또는 `/etc/ablestack
 | `POST /glue/rgw/quota` | `radosgw-admin quota set --uid <user> ...`, `radosgw-admin quota enable/disable ...` |
 | `GET /glue/rgw/user?username=<user>` | `radosgw-admin user list/info/stats` |
 | `POST /glue/rgw/user` | `radosgw-admin user create`, 필요 시 S3 key 생성 |
-| `PUT /glue/rgw/user` | `radosgw-admin user modify`, 필요 시 기존 key 제거 후 S3 key 생성 |
+| `PUT /glue/rgw/user` | `radosgw-admin user modify`, `suspended=0/1` 지정 시 `user enable/suspend`, 필요 시 기존 key 제거 후 S3 key 생성 |
 | `DELETE /glue/rgw/user` | `radosgw-admin user rm --uid <user> --purge-data` |
 | `GET /glue/rgw/bucket?detail=true` | `radosgw-admin bucket list/stats` |
-| `POST /glue/rgw/bucket` | Ceph dashboard `POST /api/rgw/bucket` |
-| `PUT /glue/rgw/bucket` | Ceph dashboard `PUT /api/rgw/bucket/<bucket>` |
+| `POST /glue/rgw/bucket` | Glue dashboard `POST /api/rgw/bucket` |
+| `PUT /glue/rgw/bucket` | Glue dashboard `PUT /api/rgw/bucket/<bucket>` |
 | `DELETE /glue/rgw/bucket` | `radosgw-admin bucket rm --bucket <bucket> --purge-objects --yes-i-really-mean-it` |
 | `POST /glue/nvmeof` | `ceph osd pool create`, `rbd pool init`, `ceph osd pool set`, `ceph orch apply -i <spec>` |
 | `POST /glue/nvmeof/image/download` | `podman pull <nvmeof-cli-image>` |
@@ -355,12 +357,12 @@ SCVM template/cloud-init에는 `ABLESTACK_NODE_ROLE=scvm` 또는 `/etc/ablestack
 | `DELETE /glue/nvmeof/namespace` | `podman run <nvmeof-cli> namespace del`, 필요 시 `rbd rm` |
 | `POST /glue/iscsi` | iSCSI service spec 생성 후 `ceph orch apply -i <spec>` |
 | `PUT /glue/iscsi` | `ceph orch apply -i <spec>`, `ceph orch redeploy iscsi.<service_id>` |
-| `GET /glue/iscsi/discovery` | Ceph dashboard `GET /api/iscsi/discoveryauth` |
-| `PUT /glue/iscsi/discovery` | Ceph dashboard `PUT /api/iscsi/discoveryauth` |
-| `GET /glue/iscsi/target` | Ceph dashboard `GET /api/iscsi/target[/<iqn>]` |
-| `POST /glue/iscsi/target` | Ceph dashboard `POST /api/iscsi/target` |
-| `PUT /glue/iscsi/target` | Ceph dashboard `PUT /api/iscsi/target/<iqn>` |
-| `DELETE /glue/iscsi/target` | Ceph dashboard `DELETE /api/iscsi/target/<iqn>` |
+| `GET /glue/iscsi/discovery` | Glue dashboard `GET /api/iscsi/discoveryauth` |
+| `PUT /glue/iscsi/discovery` | Glue dashboard `PUT /api/iscsi/discoveryauth` |
+| `GET /glue/iscsi/target` | Glue dashboard `GET /api/iscsi/target[/<iqn>]` |
+| `POST /glue/iscsi/target` | Glue dashboard `POST /api/iscsi/target` |
+| `PUT /glue/iscsi/target` | Glue dashboard `PUT /api/iscsi/target/<iqn>` |
+| `DELETE /glue/iscsi/target` | Glue dashboard `DELETE /api/iscsi/target/<iqn>` |
 | `DELETE /glue/iscsi/target/purge` | `podman ps --format json`, `podman exec -i <iscsi-container> gwcli /iscsi-targets delete <iqn>` |
 | `GET /glue/smb` | `<SMB_SCRIPT> select` |
 | `POST /glue/smb` | `<SMB_SCRIPT> delete`, `<SMB_SCRIPT> create ...` |
@@ -397,7 +399,7 @@ curl -X POST http://<scvm-ip>:8090/api/v1/glue/image \
 
 NVMe-oF CLI image는 기본적으로 `localhost:15000/glue/nvmeof-cli:Diplo`를 사용한다. 운영 환경에서 이미지나 REST endpoint가 다르면 `ABLESTACK_GLUE_NVME_OF_CLI_IMAGE`, `ABLESTACK_GLUE_NVME_OF_SERVER_ADDRESS`, `ABLESTACK_GLUE_NVME_OF_SERVER_PORT`로 override할 수 있다.
 
-iSCSI target/discovery API는 Ceph dashboard REST API를 사용한다. `ABLESTACK_GLUE_DASHBOARD_URL`이 비어 있으면 `ceph mgr services -f json`에서 dashboard URL을 조회하고, 인증은 `ABLESTACK_GLUE_DASHBOARD_USER`, `ABLESTACK_GLUE_DASHBOARD_PASSWORD`를 사용한다. password가 비어 있으면 service 생성/수정은 가능하지만 target/discovery API는 실패한다.
+iSCSI target/discovery API는 Glue dashboard REST API를 사용한다. `ABLESTACK_GLUE_DASHBOARD_URL`이 비어 있으면 `ceph mgr services -f json`에서 dashboard URL을 조회하고, 인증은 `ABLESTACK_GLUE_DASHBOARD_USER`, `ABLESTACK_GLUE_DASHBOARD_PASSWORD`를 사용한다. password가 비어 있으면 service 생성/수정은 가능하지만 target/discovery API는 실패한다.
 
 SMB API는 SCVM 로컬에서 `ABLESTACK_GLUE_SMB_SCRIPT`가 가리키는 스크립트를 실행한다. 기본값은 RPM 설치 경로인 `/etc/ablestack/shell/Samba-Execute.sh`다. API 계층에서는 SSH host 반복을 제거했고, 요청은 JSON/form/query를 모두 받아 같은 검증 흐름을 사용한다. 실제 SCVM 검증 순서는 [SCVM SMB API 테스트 체크리스트](scvm-smb-test-checklist.md)를 기준으로 한다.
 

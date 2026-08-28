@@ -11,23 +11,32 @@ import (
 // 아래 pattern은 SCVM 로컬 Ceph/RBD 명령을 위한 입력 안전장치다.
 // 각 명령의 허용 문자를 검증한 뒤에만 endpoint별 허용 범위를 넓힌다.
 var (
-	poolNamePattern       = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	imageNamePattern      = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	imageRefPattern       = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
-	cephNamePattern       = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
-	serviceNamePattern    = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
-	serviceTypePattern    = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	rgwNamePattern        = regexp.MustCompile(`^[A-Za-z0-9._@:-]+$`)
-	bucketNamePattern     = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	nqnPattern            = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
-	uuidPattern           = regexp.MustCompile(`^[A-Fa-f0-9-]+$`)
-	containerImagePattern = regexp.MustCompile(`^[A-Za-z0-9._:/-]+$`)
-	smbNamePattern        = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	smbUsernamePattern    = regexp.MustCompile(`^[A-Za-z0-9._@+-]+$`)
-	smbPathPattern        = regexp.MustCompile(`^/[A-Za-z0-9._/@:+-]*$`)
-	smbRealmPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
-	iscsiIQNPattern       = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
-	iscsiUserPattern      = regexp.MustCompile(`^[A-Za-z0-9._@+-]+$`)
+	poolNamePattern        = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	imageNamePattern       = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	imageRefPattern        = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+	cephNamePattern        = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+	serviceNamePattern     = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+	serviceTypePattern     = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	rgwNamePattern         = regexp.MustCompile(`^[A-Za-z0-9._@:-]+$`)
+	bucketNamePattern      = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	nqnPattern             = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+	uuidPattern            = regexp.MustCompile(`^[A-Fa-f0-9-]+$`)
+	containerImagePattern  = regexp.MustCompile(`^[A-Za-z0-9._:/-]+$`)
+	smbNamePattern         = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	smbUsernamePattern     = regexp.MustCompile(`^[A-Za-z0-9._@+-]+$`)
+	smbPathPattern         = regexp.MustCompile(`^/[A-Za-z0-9._/@:+-]*$`)
+	smbRealmPattern        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	iscsiIQNPattern        = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+	iscsiUserPattern       = regexp.MustCompile(`^[A-Za-z0-9._@+-]+$`)
+	iscsiCHAPUserPattern   = regexp.MustCompile(`^[A-Za-z0-9.,:@-]+$`)
+	iscsiCHAPSecretPattern = regexp.MustCompile(`^[A-Za-z0-9@_/-]+$`)
+)
+
+const (
+	iscsiCHAPUserMinLength   = 8
+	iscsiCHAPUserMaxLength   = 64
+	iscsiCHAPSecretMinLength = 12
+	iscsiCHAPSecretMaxLength = 16
 )
 
 func ValidatePoolName(value string) error {
@@ -368,6 +377,52 @@ func ValidateISCSISecret(field string, value string, required bool) error {
 		return nil
 	}
 	if strings.ContainsAny(value, "\x00\r\n") {
+		return fmt.Errorf("invalid %s", field)
+	}
+	return nil
+}
+
+// ValidateISCSIChapUser validates a target/discovery CHAP username using the
+// constraints enforced by ceph-iscsi.
+func ValidateISCSIChapUser(field string, value string, required bool) error {
+	field = strings.TrimSpace(field)
+	value = strings.TrimSpace(value)
+	if field == "" {
+		field = "user"
+	}
+	if value == "" {
+		if required {
+			return fmt.Errorf("%s is required", field)
+		}
+		return nil
+	}
+	if len(value) < iscsiCHAPUserMinLength || len(value) > iscsiCHAPUserMaxLength {
+		return fmt.Errorf("%s must be between %d and %d characters", field, iscsiCHAPUserMinLength, iscsiCHAPUserMaxLength)
+	}
+	if !iscsiCHAPUserPattern.MatchString(value) {
+		return fmt.Errorf("invalid %s", field)
+	}
+	return nil
+}
+
+// ValidateISCSIChapSecret validates a target/discovery CHAP secret using the
+// constraints enforced by ceph-iscsi.
+func ValidateISCSIChapSecret(field string, value string, required bool) error {
+	field = strings.TrimSpace(field)
+	value = strings.TrimSpace(value)
+	if field == "" {
+		field = "password"
+	}
+	if value == "" {
+		if required {
+			return fmt.Errorf("%s is required", field)
+		}
+		return nil
+	}
+	if len(value) < iscsiCHAPSecretMinLength || len(value) > iscsiCHAPSecretMaxLength {
+		return fmt.Errorf("%s must be between %d and %d characters", field, iscsiCHAPSecretMinLength, iscsiCHAPSecretMaxLength)
+	}
+	if !iscsiCHAPSecretPattern.MatchString(value) {
 		return fmt.Errorf("invalid %s", field)
 	}
 	return nil

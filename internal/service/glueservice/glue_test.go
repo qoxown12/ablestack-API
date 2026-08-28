@@ -44,6 +44,66 @@ func TestListImagesAllRBDPools(t *testing.T) {
 	}
 }
 
+func TestListHostsAddsManagementAddresses(t *testing.T) {
+	withFakeRunner(t, map[string][]byte{
+		"ceph orch host ls -f json": []byte(`[
+			{"hostname":"scvm1","addr":"100.100.33.11"},
+			{"hostname":"scvm2-mngt","addr":"100.100.33.12"},
+			{"hostname":"other","addr":"10.0.0.10"}
+		]`),
+	})
+
+	oldReader := hostsFileReader
+	hostsFileReader = func() ([]byte, error) {
+		return []byte(`
+# management addresses
+10.10.33.11 scvm1-mngt scvm-mngt
+10.10.33.12 scvm2-mngt
+10.10.33.13 scvm3-mngt # inline comment
+`), nil
+	}
+	t.Cleanup(func() { hostsFileReader = oldReader })
+
+	value, err := ListHosts(context.Background())
+	if err != nil {
+		t.Fatalf("ListHosts returned error: %v", err)
+	}
+	hosts, ok := value.([]any)
+	if !ok || len(hosts) != 3 {
+		t.Fatalf("ListHosts = %#v, want three hosts", value)
+	}
+
+	want := []string{"10.10.33.11", "10.10.33.12", ""}
+	for i, host := range hosts {
+		entry, ok := host.(map[string]any)
+		if !ok {
+			t.Fatalf("host[%d] = %#v, want object", i, host)
+		}
+		if got := entry["mgmtaddr"]; got != want[i] {
+			t.Fatalf("host[%d].mgmtaddr = %#v, want %q", i, got, want[i])
+		}
+	}
+}
+
+func TestManagementAddressesFromHostsIgnoresInvalidAndDuplicateEntries(t *testing.T) {
+	got := managementAddressesFromHosts([]byte(`
+not-an-ip scvm1-mngt
+10.10.33.11 scvm1-mngt
+10.10.33.99 scvm1-mngt
+10.10.33.12 scvm2-mngt
+10.10.33.13 scvm3-mngt other
+`))
+
+	want := map[string]string{
+		"scvm1-mngt": "10.10.33.11",
+		"scvm2-mngt": "10.10.33.12",
+		"scvm3-mngt": "10.10.33.13",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("managementAddressesFromHosts = %#v, want %#v", got, want)
+	}
+}
+
 func TestCreateImageBuildsRBDCreateCommand(t *testing.T) {
 	commands := []string{}
 	withRecordingRunner(t, &commands, map[string][]byte{
@@ -60,6 +120,43 @@ func TestCreateImageBuildsRBDCreateCommand(t *testing.T) {
 	wantCommands := []string{"rbd create --size 10240 rbd/vm01"}
 	if !reflect.DeepEqual(commands, wantCommands) {
 		t.Fatalf("commands = %#v, want %#v", commands, wantCommands)
+	}
+}
+
+func TestResizeImageAcceptsPoolImageReferenceAndBuildsCommands(t *testing.T) {
+	commands := []string{}
+	withRecordingRunner(t, &commands, map[string][]byte{
+		"rbd info rbd/iscsi-2 --format json":  []byte(`{"size":21474836480}`),
+		"rbd resize --size 25600 rbd/iscsi-2": []byte(""),
+	})
+
+	got, err := ResizeImage(context.Background(), "", "rbd/iscsi-2", 25)
+	if err != nil {
+		t.Fatalf("ResizeImage returned error: %v", err)
+	}
+	if got["pool"] != "rbd" || got["image"] != "iscsi-2" || got["size_gib"] != int64(25) || got["previous_size_gib"] != int64(20) {
+		t.Fatalf("ResizeImage = %#v, want resized image details", got)
+	}
+	want := []string{
+		"rbd info rbd/iscsi-2 --format json",
+		"rbd resize --size 25600 rbd/iscsi-2",
+	}
+	if !reflect.DeepEqual(commands, want) {
+		t.Fatalf("commands = %#v, want %#v", commands, want)
+	}
+}
+
+func TestResizeImageRejectsShrinkOrSameSize(t *testing.T) {
+	commands := []string{}
+	withRecordingRunner(t, &commands, map[string][]byte{
+		"rbd info rbd/iscsi-2 --format json": []byte(`{"size":21474836480}`),
+	})
+
+	if _, err := ResizeImage(context.Background(), "rbd", "iscsi-2", 20); err == nil || !strings.Contains(err.Error(), "greater than current image size") {
+		t.Fatalf("ResizeImage error = %v, want current size validation error", err)
+	}
+	if !reflect.DeepEqual(commands, []string{"rbd info rbd/iscsi-2 --format json"}) {
+		t.Fatalf("commands = %#v, want info only", commands)
 	}
 }
 
@@ -188,6 +285,20 @@ func TestRGWBucketDetailUsesStatsCommand(t *testing.T) {
 	want := []string{"radosgw-admin bucket stats --bucket bucket-a"}
 	if !reflect.DeepEqual(commands, want) {
 		t.Fatalf("commands = %#v, want %#v", commands, want)
+	}
+}
+
+func TestRGWBucketDeleteReturnsNonEmptyWarning(t *testing.T) {
+	withCustomRunner(t, func(ctx context.Context, command string, args ...string) ([]byte, bool, error) {
+		return []byte("ERROR: Bucket is not empty. Remove all objects before deletion."), false, errors.New("exit status 1")
+	})
+
+	_, err := RGWBucketDelete(context.Background(), "bucket-a")
+	if err == nil {
+		t.Fatalf("RGWBucketDelete returned nil error")
+	}
+	if got := err.Error(); got != rgwBucketNotEmptyMessage {
+		t.Fatalf("error = %q, want %q", got, rgwBucketNotEmptyMessage)
 	}
 }
 
@@ -544,6 +655,229 @@ func TestISCSITargetCreateUsesDashboardAPI(t *testing.T) {
 	}
 }
 
+func TestNormalizeISCSIAuthPayloadAcceptsCHAPWithoutMutualAuth(t *testing.T) {
+	payload, err := normalizeISCSIAuthPayload("ablecloud", "AbleCloud123", "", "", true)
+	if err != nil {
+		t.Fatalf("normalizeISCSIAuthPayload returned error: %v", err)
+	}
+	if payload.User != "ablecloud" || payload.Password != "AbleCloud123" {
+		t.Fatalf("payload = %#v, want regular CHAP credentials", payload)
+	}
+	if payload.MutualUser != "" || payload.MutualPassword != "" {
+		t.Fatalf("payload = %#v, want empty mutual CHAP credentials", payload)
+	}
+}
+
+func TestNormalizeISCSIAuthPayloadRejectsInvalidCHAPCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		user     string
+		password string
+		want     string
+	}{
+		{name: "short username", user: "iscsi", password: "AbleCloud123", want: "user must be between 8 and 64 characters"},
+		{name: "short password", user: "ablecloud", password: "AbleCloud12", want: "password must be between 12 and 16 characters"},
+		{name: "password with unsupported character", user: "ablecloud", password: "AbleCloud!23", want: "invalid password"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := normalizeISCSIAuthPayload(tt.user, tt.password, "", "", true)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeISCSIAuthPayloadRequiresMutualCredentialsTogether(t *testing.T) {
+	_, err := normalizeISCSIAuthPayload("ablecloud", "AbleCloud123", "mutualuser", "", true)
+	if err == nil || err.Error() != "mutual_user and mutual_password must be provided together" {
+		t.Fatalf("error = %v, want incomplete mutual credential error", err)
+	}
+}
+
+func TestNormalizeISCSITargetPayloadAllowsACLWithoutTargetCHAP(t *testing.T) {
+	payload, err := normalizeISCSITargetPayload(
+		"iqn.2026-08.ablecloud.io:1787895553",
+		"",
+		[]string{"scvm3"},
+		[]string{"10.10.32.13"},
+		[]string{"rbd"},
+		[]string{"iscsi-1efefv"},
+		"true",
+		"",
+		"",
+		"",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("normalizeISCSITargetPayload returned error: %v", err)
+	}
+	if !payload.ACLEnabled {
+		t.Fatalf("acl_enabled = false, want true")
+	}
+	if payload.Auth != (iscsiAuthPayload{}) {
+		t.Fatalf("auth = %#v, want empty target CHAP credentials", payload.Auth)
+	}
+}
+
+func TestNormalizeISCSITargetPayloadRejectsACLWithTargetCHAP(t *testing.T) {
+	_, err := normalizeISCSITargetPayload(
+		"iqn.2026-08.ablecloud.io:1787895553",
+		"",
+		[]string{"scvm3"},
+		[]string{"10.10.32.13"},
+		[]string{"rbd"},
+		[]string{"iscsi-1efefv"},
+		"true",
+		"ablecloud",
+		"AbleCloud123",
+		"",
+		"",
+	)
+	if err == nil || err.Error() != "acl_enabled must be disabled when target CHAP authentication is configured" {
+		t.Fatalf("error = %v, want ACL/CHAP conflict error", err)
+	}
+}
+
+func TestNormalizeISCSITargetPayloadKeepsTargetIQNWhenRenaming(t *testing.T) {
+	oldIQN := "iqn.2026-08.ablecloud.io:1786434358"
+	newIQN := "iqn.2026-08.ablecloud.io:1786434359"
+
+	payload, err := normalizeISCSITargetPayload(
+		oldIQN,
+		newIQN,
+		[]string{"scvm"},
+		[]string{"10.10.10.11"},
+		[]string{"rbd"},
+		[]string{"iscsi-2"},
+		"false",
+		"",
+		"",
+		"",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("normalizeISCSITargetPayload returned error: %v", err)
+	}
+	if payload.TargetIQN != oldIQN {
+		t.Fatalf("target_iqn = %q, want %q", payload.TargetIQN, oldIQN)
+	}
+	if payload.NewTargetIQN != newIQN {
+		t.Fatalf("new_target_iqn = %q, want %q", payload.NewTargetIQN, newIQN)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("json.Marshal(payload) returned error: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"target_iqn":"`+oldIQN+`"`) {
+		t.Fatalf("encoded payload = %s, want target_iqn", encoded)
+	}
+}
+
+func TestNormalizeISCSITargetPayloadOmitsSameIQNRename(t *testing.T) {
+	iqn := "iqn.2026-08.ablecloud.io:1787881832"
+
+	payload, err := normalizeISCSITargetPayload(
+		iqn,
+		iqn,
+		[]string{"scvm"},
+		[]string{"10.10.10.11"},
+		[]string{"rbd"},
+		[]string{"iscsi-1"},
+		"false",
+		"",
+		"",
+		"",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("normalizeISCSITargetPayload returned error: %v", err)
+	}
+	if payload.TargetIQN != iqn {
+		t.Fatalf("target_iqn = %q, want %q", payload.TargetIQN, iqn)
+	}
+	if payload.NewTargetIQN != "" {
+		t.Fatalf("new_target_iqn = %q, want empty for an unchanged IQN", payload.NewTargetIQN)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("json.Marshal(payload) returned error: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"target_iqn":"`+iqn+`"`) {
+		t.Fatalf("encoded payload = %s, want target_iqn", encoded)
+	}
+	if strings.Contains(string(encoded), `"new_target_iqn"`) {
+		t.Fatalf("encoded payload = %s, want no new_target_iqn for an unchanged IQN", encoded)
+	}
+}
+
+func TestISCSITargetUpdateIncludesTargetIQNWhenRemovingDisk(t *testing.T) {
+	t.Setenv(envISCSIDashboardUser, "admin")
+	t.Setenv(envISCSIDashboardPassword, "secret")
+	iqn := "iqn.2026-08.ablecloud.io:1787881832"
+	requests := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		switch r.Method + " " + r.URL.Path {
+		case "POST /api/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"token":"token-1"}`))
+		case "PUT /api/iscsi/target/" + iqn:
+			var payload struct {
+				TargetIQN    string             `json:"target_iqn"`
+				NewTargetIQN string             `json:"new_target_iqn"`
+				Disks        []iscsiDiskPayload `json:"disks"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode payload: %v", err)
+			}
+			if payload.TargetIQN != iqn {
+				t.Fatalf("target_iqn = %q, want %q", payload.TargetIQN, iqn)
+			}
+			if payload.NewTargetIQN != "" {
+				t.Fatalf("new_target_iqn = %q, want empty", payload.NewTargetIQN)
+			}
+			if len(payload.Disks) != 1 || payload.Disks[0].Image != "iscsi-1" {
+				t.Fatalf("disks = %#v, want one remaining disk", payload.Disks)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"updated"}`))
+		default:
+			t.Fatalf("unexpected dashboard request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv(envISCSIDashboardURL, server.URL)
+
+	got, err := ISCSITargetUpdate(
+		context.Background(),
+		iqn,
+		iqn,
+		[]string{"scvm"},
+		[]string{"10.10.10.11"},
+		[]string{"rbd"},
+		[]string{"iscsi-1"},
+		"false",
+		"",
+		"",
+		"",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("ISCSITargetUpdate returned error: %v", err)
+	}
+	value, ok := got.(map[string]any)
+	if !ok || value["status"] != "updated" {
+		t.Fatalf("ISCSITargetUpdate = %#v, want updated", got)
+	}
+	want := []string{"POST /api/auth", "PUT /api/iscsi/target/" + iqn}
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("requests = %#v, want %#v", requests, want)
+	}
+}
+
 func TestISCSITargetPurgeUsesLocalPodmanExec(t *testing.T) {
 	commands := []string{}
 	iqn := "iqn.2026-06.io.ablecloud:target01"
@@ -799,7 +1133,7 @@ func TestRGWUserUpdateRedactsSecretKeyInCommandError(t *testing.T) {
 		return []byte("failed"), false, errors.New("exit status 1")
 	})
 
-	_, err := RGWUserUpdate(context.Background(), "user01", "", "", "s3", "access", "secret-value")
+	_, err := RGWUserUpdate(context.Background(), "user01", "", "", "", "s3", "access", "secret-value")
 	if err == nil {
 		t.Fatalf("RGWUserUpdate returned nil error")
 	}
@@ -808,6 +1142,66 @@ func TestRGWUserUpdateRedactsSecretKeyInCommandError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "****") {
 		t.Fatalf("error did not include secret redaction marker: %v", err)
+	}
+}
+
+func TestRGWUserUpdateSetsSuspendedState(t *testing.T) {
+	tests := []struct {
+		name      string
+		suspended string
+	}{
+		{name: "activate", suspended: "0"},
+		{name: "suspend", suspended: "1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commands := []string{}
+			stateCommand := "suspend"
+			if tt.suspended == "0" {
+				stateCommand = "enable"
+			}
+			withRecordingRunner(t, &commands, map[string][]byte{
+				"radosgw-admin user " + stateCommand + " --uid user01": []byte(""),
+			})
+
+			if _, err := RGWUserUpdate(context.Background(), "user01", "", "", tt.suspended, "", "", ""); err != nil {
+				t.Fatalf("RGWUserUpdate returned error: %v", err)
+			}
+			want := []string{"radosgw-admin user " + stateCommand + " --uid user01"}
+			if !reflect.DeepEqual(commands, want) {
+				t.Fatalf("commands = %#v, want %#v", commands, want)
+			}
+		})
+	}
+}
+
+func TestRGWUserUpdateModifiesMetadataBeforeChangingState(t *testing.T) {
+	commands := []string{}
+	withRecordingRunner(t, &commands, map[string][]byte{
+		"radosgw-admin user modify --uid user01 --display-name qqq --email tj@ablecloud.io": []byte(""),
+		"radosgw-admin user enable --uid user01":                                            []byte(""),
+	})
+
+	if _, err := RGWUserUpdate(context.Background(), "user01", "qqq", "tj@ablecloud.io", "0", "", "", ""); err != nil {
+		t.Fatalf("RGWUserUpdate returned error: %v", err)
+	}
+	want := []string{
+		"radosgw-admin user modify --uid user01 --display-name qqq --email tj@ablecloud.io",
+		"radosgw-admin user enable --uid user01",
+	}
+	if !reflect.DeepEqual(commands, want) {
+		t.Fatalf("commands = %#v, want %#v", commands, want)
+	}
+}
+
+func TestRGWUserUpdateRejectsInvalidSuspendedState(t *testing.T) {
+	withCustomRunner(t, func(ctx context.Context, command string, args ...string) ([]byte, bool, error) {
+		return nil, false, errors.New("command should not run")
+	})
+
+	if _, err := RGWUserUpdate(context.Background(), "user01", "", "", "2", "", "", ""); err == nil {
+		t.Fatalf("RGWUserUpdate accepted invalid suspended state")
 	}
 }
 

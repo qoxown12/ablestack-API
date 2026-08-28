@@ -20,6 +20,7 @@ type RootStatus = GlueModel.RootStatus
 type NotImplementedValue = GlueModel.NotImplementedValue
 type GenericRequest = GlueModel.GenericRequest
 type ImageRequest = GlueModel.ImageRequest
+type ImageResizeRequest = GlueModel.ImageResizeRequest
 type ServiceControlRequest = GlueModel.ServiceControlRequest
 
 type routeSpec struct {

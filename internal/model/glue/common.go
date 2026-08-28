@@ -62,6 +62,16 @@ type ImageRequest struct {
 	Size      int64  `json:"size,omitempty" example:"10"`
 }
 
+// ImageResizeRequest는 RBD image 확장 API에서 사용하는 요청 본문이다.
+// image는 pool/image 형식으로 전달하거나 pool_name/image_name을 사용할 수 있다.
+// @name GlueImageResizeRequest
+type ImageResizeRequest struct {
+	PoolName  string `json:"pool_name,omitempty" example:"rbd"`
+	ImageName string `json:"image_name,omitempty" example:"iscsi-2"`
+	Image     string `json:"image,omitempty" example:"rbd/iscsi-2"`
+	Size      int64  `json:"size" example:"25"`
+}
+
 // ServiceControlRequest는 Glue service 제어 API에서 사용하는 요청 본문이다.
 // @name GlueServiceControlRequest
 type ServiceControlRequest struct {

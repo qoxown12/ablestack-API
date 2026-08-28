@@ -196,7 +196,7 @@ func ISCSIServiceUpdateDoc() {}
 // Glue-ISCSIISCSIDiscoveryGetDoc Swagger 문서
 //
 //	@Summary		iSCSI Discovery 조회
-//	@Description	Ceph dashboard API로 iSCSI discovery auth 정보를 조회합니다.
+//	@Description	Glue dashboard API로 iSCSI discovery auth 정보를 조회합니다.
 //	@Tags			Glue-ISCSI
 //	@Produce		json
 //	@Success		200	{object}	GlueModel.Response
@@ -208,7 +208,7 @@ func ISCSIDiscoveryGetDoc() {}
 // Glue-ISCSIISCSIDiscoveryUpdateDoc Swagger 문서
 //
 //	@Summary		iSCSI Discovery 수정
-//	@Description	Ceph dashboard API로 iSCSI discovery auth 정보를 수정합니다.
+//	@Description	Glue dashboard API로 iSCSI discovery auth 정보를 수정합니다.
 //	@Tags			Glue-ISCSI
 //	@Accept			json
 //	@Produce		json
@@ -223,7 +223,7 @@ func ISCSIDiscoveryUpdateDoc() {}
 // Glue-ISCSIISCSITargetListDoc Swagger 문서
 //
 //	@Summary		iSCSI Target 목록
-//	@Description	Ceph dashboard API로 iSCSI target 목록 또는 상세를 조회합니다.
+//	@Description	Glue dashboard API로 iSCSI target 목록 또는 상세를 조회합니다.
 //	@Tags			Glue-ISCSI
 //	@Produce		json
 //	@Param			iqn_id	query		string	false	"iSCSI target IQN"
@@ -237,7 +237,7 @@ func ISCSITargetListDoc() {}
 // Glue-ISCSIISCSITargetCreateDoc Swagger 문서
 //
 //	@Summary		iSCSI Target 생성
-//	@Description	Ceph dashboard API로 iSCSI target을 생성합니다.
+//	@Description	Glue dashboard API로 iSCSI target을 생성합니다.
 //	@Tags			Glue-ISCSI
 //	@Accept			json
 //	@Produce		json
@@ -252,7 +252,7 @@ func ISCSITargetCreateDoc() {}
 // Glue-ISCSIISCSITargetUpdateDoc Swagger 문서
 //
 //	@Summary		iSCSI Target 수정
-//	@Description	Ceph dashboard API로 iSCSI target을 수정합니다.
+//	@Description	Glue dashboard API로 iSCSI target을 수정합니다.
 //	@Tags			Glue-ISCSI
 //	@Accept			json
 //	@Produce		json
@@ -267,7 +267,7 @@ func ISCSITargetUpdateDoc() {}
 // Glue-ISCSIISCSITargetDeleteDoc Swagger 문서
 //
 //	@Summary		iSCSI Target 삭제
-//	@Description	Ceph dashboard API로 iSCSI target을 삭제합니다.
+//	@Description	Glue dashboard API로 iSCSI target을 삭제합니다.
 //	@Tags			Glue-ISCSI
 //	@Accept			json
 //	@Produce		json
