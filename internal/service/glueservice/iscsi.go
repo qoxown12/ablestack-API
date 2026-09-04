@@ -55,6 +55,14 @@ type iscsiServiceSpecBody struct {
 	TrustedIPList string `yaml:"trusted_ip_list"`
 }
 
+type iscsiOrchService struct {
+	ServiceID   string `json:"service_id"`
+	ServiceName string `json:"service_name"`
+	Placement   struct {
+		Hosts []string `json:"hosts"`
+	} `json:"placement"`
+}
+
 type iscsiAuthPayload struct {
 	User           string `json:"user"`
 	Password       string `json:"password"`
@@ -89,6 +97,20 @@ type iscsiTargetPayload struct {
 	Auth         iscsiAuthPayload     `json:"auth"`
 }
 
+// iscsiTargetUpdatePayload contains the identity fields required by the
+// Glue dashboard PUT API. The dashboard requires new_target_iqn even when
+// the target is not renamed, so it is populated with the current IQN then.
+type iscsiTargetUpdatePayload struct {
+	TargetIQN    string               `json:"target_iqn"`
+	NewTargetIQN string               `json:"new_target_iqn,omitempty"`
+	Portals      []iscsiPortalPayload `json:"portals"`
+	Disks        []iscsiDiskPayload   `json:"disks"`
+	Clients      []any                `json:"clients"`
+	Groups       []any                `json:"groups"`
+	ACLEnabled   bool                 `json:"acl_enabled"`
+	Auth         iscsiAuthPayload     `json:"auth"`
+}
+
 type iscsiDashboardToken struct {
 	Token string `json:"token"`
 }
@@ -97,6 +119,9 @@ type iscsiDashboardToken struct {
 func ISCSIServiceCreate(ctx context.Context, serviceID string, hosts []string, trustedIPList []string, pool string, apiPort string, apiUser string, apiPassword string, count string) (map[string]any, error) {
 	config, err := normalizeISCSIServiceConfig(serviceID, hosts, trustedIPList, pool, apiPort, apiUser, apiPassword, count)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateISCSIServicePlacement(ctx, config.ServiceID, config.Hosts); err != nil {
 		return nil, err
 	}
 	specPath, err := writeISCSIServiceSpec(config)
@@ -166,6 +191,9 @@ func ISCSITargetCreate(ctx context.Context, iqnID string, hosts []string, ipAddr
 	if err != nil {
 		return nil, err
 	}
+	if err := validateISCSITargetGatewayPlacement(ctx, payload.Portals); err != nil {
+		return nil, err
+	}
 	return cephDashboardRequest(ctx, http.MethodPost, "api/iscsi/target", payload, http.StatusCreated)
 }
 
@@ -175,7 +203,131 @@ func ISCSITargetUpdate(ctx context.Context, iqnID string, newIQNID string, hosts
 	if err != nil {
 		return nil, err
 	}
-	return cephDashboardRequest(ctx, http.MethodPut, "api/iscsi/target/"+url.PathEscape(strings.TrimSpace(iqnID)), payload, http.StatusOK)
+	currentIQN := strings.TrimSpace(iqnID)
+	updatePayload := buildISCSITargetUpdatePayload(currentIQN, payload)
+	if err := validateISCSITargetGatewayPlacement(ctx, payload.Portals); err != nil {
+		return nil, err
+	}
+	return cephDashboardRequest(ctx, http.MethodPut, "api/iscsi/target/"+url.PathEscape(currentIQN), updatePayload, http.StatusOK)
+}
+
+func buildISCSITargetUpdatePayload(iqnID string, payload iscsiTargetPayload) iscsiTargetUpdatePayload {
+	currentIQN := strings.TrimSpace(iqnID)
+	newTargetIQN := payload.NewTargetIQN
+	if newTargetIQN == "" {
+		// The dashboard's PUT handler validates new_target_iqn unconditionally.
+		// For an ordinary edit, the current IQN is also the resulting IQN.
+		newTargetIQN = currentIQN
+	}
+	return iscsiTargetUpdatePayload{
+		TargetIQN:    currentIQN,
+		NewTargetIQN: newTargetIQN,
+		Portals:      payload.Portals,
+		Disks:        payload.Disks,
+		Clients:      payload.Clients,
+		Groups:       payload.Groups,
+		ACLEnabled:   payload.ACLEnabled,
+		Auth:         payload.Auth,
+	}
+}
+
+func listISCSIOrchServices(ctx context.Context) ([]iscsiOrchService, error) {
+	value, err := ListServices(ctx, "iscsi", "")
+	if err != nil {
+		return nil, fmt.Errorf("list iSCSI gateway services: %w", err)
+	}
+
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("encode iSCSI gateway services: %w", err)
+	}
+	services := []iscsiOrchService{}
+	if err := json.Unmarshal(raw, &services); err != nil {
+		return nil, fmt.Errorf("decode iSCSI gateway services: %w", err)
+	}
+	return services, nil
+}
+
+func iscsiOrchServiceName(service iscsiOrchService) string {
+	if name := strings.TrimSpace(service.ServiceName); name != "" {
+		return name
+	}
+	if id := strings.TrimSpace(service.ServiceID); id != "" {
+		return "iscsi." + id
+	}
+	return "unknown"
+}
+
+func iscsiOrchServiceID(service iscsiOrchService) string {
+	if id := strings.TrimSpace(service.ServiceID); id != "" {
+		return id
+	}
+	return strings.TrimPrefix(strings.TrimSpace(service.ServiceName), "iscsi.")
+}
+
+func normalizedISCSIHosts(hosts []string) map[string]string {
+	result := make(map[string]string)
+	for _, host := range hosts {
+		normalized := strings.ToLower(strings.TrimSpace(host))
+		if normalized != "" {
+			result[normalized] = strings.TrimSpace(host)
+		}
+	}
+	return result
+}
+
+func validateISCSIServicePlacement(ctx context.Context, serviceID string, hosts []string) error {
+	services, err := listISCSIOrchServices(ctx)
+	if err != nil {
+		return err
+	}
+	requestedHosts := normalizedISCSIHosts(hosts)
+	serviceID = strings.TrimSpace(serviceID)
+
+	for _, service := range services {
+		if iscsiOrchServiceID(service) == serviceID {
+			continue
+		}
+		existingHosts := normalizedISCSIHosts(service.Placement.Hosts)
+		for normalizedHost, displayHost := range requestedHosts {
+			if _, exists := existingHosts[normalizedHost]; exists {
+				return fmt.Errorf("iSCSI host %q is already assigned to service %q; only one iSCSI gateway service may run on a host", displayHost, iscsiOrchServiceName(service))
+			}
+		}
+	}
+	return nil
+}
+
+func validateISCSITargetGatewayPlacement(ctx context.Context, portals []iscsiPortalPayload) error {
+	services, err := listISCSIOrchServices(ctx)
+	if err != nil {
+		return err
+	}
+
+	hostServices := make(map[string]map[string]struct{})
+	for _, service := range services {
+		serviceName := iscsiOrchServiceName(service)
+		for host := range normalizedISCSIHosts(service.Placement.Hosts) {
+			if hostServices[host] == nil {
+				hostServices[host] = make(map[string]struct{})
+			}
+			hostServices[host][serviceName] = struct{}{}
+		}
+	}
+
+	for _, portal := range portals {
+		host := strings.ToLower(strings.TrimSpace(portal.Host))
+		servicesForHost := hostServices[host]
+		if len(servicesForHost) < 2 {
+			continue
+		}
+		names := make([]string, 0, len(servicesForHost))
+		for name := range servicesForHost {
+			names = append(names, name)
+		}
+		return fmt.Errorf("iSCSI host %q is assigned to multiple gateway services (%s); remove the duplicate service before creating a target", strings.TrimSpace(portal.Host), strings.Join(names, ", "))
+	}
+	return nil
 }
 
 // ISCSITargetDelete는 Glue dashboard API로 iSCSI target을 삭제한다.

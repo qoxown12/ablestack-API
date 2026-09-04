@@ -543,6 +543,9 @@ func TestISCSIServiceCreateBuildsCephOrchSpec(t *testing.T) {
 	withCustomRunner(t, func(ctx context.Context, command string, args ...string) ([]byte, bool, error) {
 		key := commandLine(command, args)
 		commands = append(commands, key)
+		if key == "ceph orch ls --service_type iscsi -f json" {
+			return []byte("[]"), false, nil
+		}
 		if !strings.HasPrefix(key, "ceph orch apply -i ") {
 			return nil, false, errors.New("unexpected command: " + key)
 		}
@@ -575,8 +578,8 @@ func TestISCSIServiceCreateBuildsCephOrchSpec(t *testing.T) {
 	if got["status"] != "success" || got["service_id"] != "iscsi" {
 		t.Fatalf("ISCSIServiceCreate = %#v, want success iscsi", got)
 	}
-	if len(commands) != 1 || !strings.HasPrefix(commands[0], "ceph orch apply -i ") {
-		t.Fatalf("commands = %#v, want ceph orch apply", commands)
+	if len(commands) != 2 || commands[0] != "ceph orch ls --service_type iscsi -f json" || !strings.HasPrefix(commands[1], "ceph orch apply -i ") {
+		t.Fatalf("commands = %#v, want service list then ceph orch apply", commands)
 	}
 }
 
@@ -585,6 +588,9 @@ func TestISCSIServiceUpdateRedeploysService(t *testing.T) {
 	withCustomRunner(t, func(ctx context.Context, command string, args ...string) ([]byte, bool, error) {
 		key := commandLine(command, args)
 		commands = append(commands, key)
+		if key == "ceph orch ls --service_type iscsi -f json" {
+			return []byte("[]"), false, nil
+		}
 		if strings.HasPrefix(key, "ceph orch apply -i ") || key == "ceph orch redeploy iscsi.iscsi" {
 			return []byte(""), false, nil
 		}
@@ -594,8 +600,25 @@ func TestISCSIServiceUpdateRedeploysService(t *testing.T) {
 	if _, err := ISCSIServiceUpdate(context.Background(), "iscsi", []string{"scvm"}, []string{"10.10.10.11"}, "rbd", "5000", "admin", "secret", "1"); err != nil {
 		t.Fatalf("ISCSIServiceUpdate returned error: %v", err)
 	}
-	if len(commands) != 2 || !strings.HasPrefix(commands[0], "ceph orch apply -i ") || commands[1] != "ceph orch redeploy iscsi.iscsi" {
-		t.Fatalf("commands = %#v, want apply then redeploy", commands)
+	if len(commands) != 3 || commands[0] != "ceph orch ls --service_type iscsi -f json" || !strings.HasPrefix(commands[1], "ceph orch apply -i ") || commands[2] != "ceph orch redeploy iscsi.iscsi" {
+		t.Fatalf("commands = %#v, want service list, apply then redeploy", commands)
+	}
+}
+
+func TestISCSIServiceCreateRejectsOverlappingHost(t *testing.T) {
+	commands := []string{}
+	withRecordingRunner(t, &commands, map[string][]byte{
+		"ceph orch ls --service_type iscsi -f json": []byte(`[
+			{"service_id":"iscsi","service_name":"iscsi.iscsi","placement":{"hosts":["scvm3"]}}
+		]`),
+	})
+
+	_, err := ISCSIServiceCreate(context.Background(), "iscsirth", []string{"scvm3"}, []string{"10.10.10.13"}, "rbd", "455", "admin", "secret", "")
+	if err == nil || !strings.Contains(err.Error(), "scvm3") || !strings.Contains(err.Error(), "iscsi.iscsi") {
+		t.Fatalf("ISCSIServiceCreate error = %v, want overlapping host error", err)
+	}
+	if len(commands) != 1 || commands[0] != "ceph orch ls --service_type iscsi -f json" {
+		t.Fatalf("commands = %#v, want only service list", commands)
 	}
 }
 
@@ -628,6 +651,9 @@ func TestISCSITargetCreateUsesDashboardAPI(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv(envISCSIDashboardURL, server.URL)
+	withFakeRunner(t, map[string][]byte{
+		"ceph orch ls --service_type iscsi -f json": []byte("[]"),
+	})
 
 	got, err := ISCSITargetCreate(
 		context.Background(),
@@ -652,6 +678,36 @@ func TestISCSITargetCreateUsesDashboardAPI(t *testing.T) {
 	want := []string{"POST /api/auth", "POST /api/iscsi/target"}
 	if !reflect.DeepEqual(requests, want) {
 		t.Fatalf("requests = %#v, want %#v", requests, want)
+	}
+}
+
+func TestISCSITargetCreateRejectsOverlappingGatewayHosts(t *testing.T) {
+	commands := []string{}
+	withRecordingRunner(t, &commands, map[string][]byte{
+		"ceph orch ls --service_type iscsi -f json": []byte(`[
+			{"service_id":"iscsi","service_name":"iscsi.iscsi","placement":{"hosts":["scvm3"]}},
+			{"service_id":"iscsirth","service_name":"iscsi.iscsirth","placement":{"hosts":["scvm3"]}}
+		]`),
+	})
+
+	_, err := ISCSITargetCreate(
+		context.Background(),
+		"iqn.2026-06.io.ablecloud:target02",
+		[]string{"scvm3"},
+		[]string{"10.10.10.13"},
+		[]string{"rbd"},
+		[]string{"vm01"},
+		"false",
+		"",
+		"",
+		"",
+		"",
+	)
+	if err == nil || !strings.Contains(err.Error(), "multiple gateway services") {
+		t.Fatalf("ISCSITargetCreate error = %v, want overlapping gateway error", err)
+	}
+	if len(commands) != 1 || commands[0] != "ceph orch ls --service_type iscsi -f json" {
+		t.Fatalf("commands = %#v, want only service list", commands)
 	}
 }
 
@@ -813,6 +869,45 @@ func TestNormalizeISCSITargetPayloadOmitsSameIQNRename(t *testing.T) {
 	}
 }
 
+func TestBuildISCSITargetUpdatePayloadIncludesIdentityIQNs(t *testing.T) {
+	currentIQN := "iqn.2026-07.ablecloud.io:178"
+	newIQN := "iqn.2026-07.ablecloud.io:179"
+
+	tests := []struct {
+		name    string
+		newIQN  string
+		wantNew bool
+	}{
+		{name: "same IQN", newIQN: "", wantNew: false},
+		{name: "renamed IQN", newIQN: newIQN, wantNew: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := buildISCSITargetUpdatePayload(currentIQN, iscsiTargetPayload{NewTargetIQN: tt.newIQN})
+			encoded, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatalf("json.Marshal(payload) returned error: %v", err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(encoded, &got); err != nil {
+				t.Fatalf("json.Unmarshal(payload) returned error: %v", err)
+			}
+			if got["target_iqn"] != currentIQN {
+				t.Fatalf("target_iqn = %#v, want current IQN", got["target_iqn"])
+			}
+			if tt.wantNew {
+				if got["new_target_iqn"] != newIQN {
+					t.Fatalf("new_target_iqn = %#v, want new IQN", got["new_target_iqn"])
+				}
+				return
+			}
+			if got["new_target_iqn"] != currentIQN {
+				t.Fatalf("new_target_iqn = %#v, want current IQN for dashboard PUT", got["new_target_iqn"])
+			}
+		})
+	}
+}
+
 func TestISCSITargetUpdateIncludesTargetIQNWhenRemovingDisk(t *testing.T) {
 	t.Setenv(envISCSIDashboardUser, "admin")
 	t.Setenv(envISCSIDashboardPassword, "secret")
@@ -836,8 +931,8 @@ func TestISCSITargetUpdateIncludesTargetIQNWhenRemovingDisk(t *testing.T) {
 			if payload.TargetIQN != iqn {
 				t.Fatalf("target_iqn = %q, want %q", payload.TargetIQN, iqn)
 			}
-			if payload.NewTargetIQN != "" {
-				t.Fatalf("new_target_iqn = %q, want empty", payload.NewTargetIQN)
+			if payload.NewTargetIQN != iqn {
+				t.Fatalf("new_target_iqn = %q, want current IQN", payload.NewTargetIQN)
 			}
 			if len(payload.Disks) != 1 || payload.Disks[0].Image != "iscsi-1" {
 				t.Fatalf("disks = %#v, want one remaining disk", payload.Disks)
@@ -850,6 +945,9 @@ func TestISCSITargetUpdateIncludesTargetIQNWhenRemovingDisk(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv(envISCSIDashboardURL, server.URL)
+	withFakeRunner(t, map[string][]byte{
+		"ceph orch ls --service_type iscsi -f json": []byte("[]"),
+	})
 
 	got, err := ISCSITargetUpdate(
 		context.Background(),
